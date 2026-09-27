@@ -7,8 +7,9 @@ import SettingInfo from '../components/SettingInfo';
 import { get, post } from '../api';
 import { useStatus } from '../App';
 import { PageHeader, Loading, Notice, Text, Pick, Toggle, ask } from '../components/ui';
-import { num, usd, locale as fmtLocale, ago } from '../fmt';
+import { num, usd, plainUsd, locale as fmtLocale, ago } from '../fmt';
 import { fxFormat } from '../currency';
+import { followDefault } from '../privacy';
 import { useI18n, translate as tt } from '../i18n';
 
 const amt = (v, d = 4) => (v == null ? '—' : Number(v).toLocaleString(fmtLocale(), { maximumFractionDigits: d }));
@@ -22,7 +23,7 @@ const SETTINGS_NAV = [
   ['telegram', 'Telegram', 'Hubungkan bot dan chat', MessageCircle],
   ['gmgn', 'GMGN', 'API key untuk lilin harga GMGN', ChartCandlestick],
   ['loop', 'Mesin', 'Pemindaian dan harga ETH', Settings2],
-  ['display', 'Tampilan', 'Mata uang kedua di samping dolar', Coins],
+  ['display', 'Tampilan', 'Sensor nilai dan mata uang kedua', Coins],
   ['security', 'Keamanan', 'Akses masuk dasbor', ShieldCheck],
 ];
 
@@ -631,9 +632,23 @@ function DisplayTab({ d, reload }) {
     say(r, 'Kurs diperbarui');
     if (!r.error) reload();
   };
+  // Sensor bawaan: dicatat di config server, jadi berlaku untuk tiap peramban dan
+  // mini app Telegram — bukan cuma peramban ini. Tab ini langsung ikut.
+  const hideDefault = async (v) => {
+    setBusy('hide');
+    const r = await post('/api/settings/display', { hide_values: v });
+    setBusy('');
+    say(r, v ? 'Nilai portofolio kini tersensor secara bawaan' : 'Nilai portofolio kini tampil secara bawaan');
+    if (!r.error) { followDefault(v); reload(); }
+  };
   // Contoh dipakai supaya pilihannya terlihat hasilnya sebelum pindah halaman.
   const sample = fx?.rate ? fxFormat(1234.56, fx) : null;
   return (
+    <div className="flex flex-col gap-10">
+    <Section title="Sensor nilai portofolio" desc="Menutup semua nilai dolar milik kita — saldo, modal, PnL, fee, dan jumlah token — dengan $•••••. Persen dan data pasar tetap terlihat. Berguna untuk berbagi layar, merekam, atau membuka dasbor di tempat umum.">
+      <Toggle label="Sensor secara bawaan" value={dp.hide_values} onChange={hideDefault} isDisabled={busy === 'hide'}
+        desc="Setiap kali dasbor atau mini app Telegram dibuka, nilainya sudah tersensor. Ikon mata di sebelah tombol tema tetap bisa membukanya — hanya untuk tab itu, sampai tab ditutup." />
+    </Section>
     <Section title="Mata uang kedua" desc="Semua nominal di dasbor dihitung dalam dolar — itu satuan yang dipakai pool, harga token, dan seluruh perhitungan PnL. Pilihan di sini menambahkan nilai yang sama dalam mata uang lain, ditulis kecil di sebelah angka dolarnya, supaya nominalnya punya rasa besaran. Angka utamanya tidak berubah.">
       <div className="grid gap-5 md:grid-cols-2">
         <Pick label="Mata uang" value={dp.currency || OFF} onChange={pick} isDisabled={busy === 'save'} options={options}
@@ -641,7 +656,7 @@ function DisplayTab({ d, reload }) {
         <div className="flex flex-col gap-2">
           <div className="text-xs text-muted">{t('Contoh tampilan')}</div>
           <div className="num rounded-md border border-border px-3 py-2.5 text-lg font-semibold tracking-tight">
-            {usd(1234.56)}{sample && <span className="ml-1.5 text-xs font-medium text-muted">≈ {sample}</span>}
+            {plainUsd(1234.56)}{sample && <span className="ml-1.5 text-xs font-medium text-muted">≈ {sample}</span>}
           </div>
           {dp.currency && !fx?.rate && <Notice status="warning">{t('Kurs belum terbaca')}{fx?.error ? ` — ${fx.error}` : ''}</Notice>}
         </div>
@@ -663,6 +678,7 @@ function DisplayTab({ d, reload }) {
         </>
       )}
     </Section>
+    </div>
   );
 }
 

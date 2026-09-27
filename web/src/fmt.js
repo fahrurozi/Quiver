@@ -1,19 +1,24 @@
 import { chainInfo, ETHERSCAN } from './chain';
 import { getLocale, translate as t } from './i18n';
+import { isHidden, MASK } from './privacy';
 
 // Semua format angka & waktu mengikuti bahasa yang sedang dipakai:
 // Indonesia memakai koma desimal (0,00201), Inggris memakai titik (0.00201).
 const loc = () => (getLocale() === 'en' ? 'en-US' : 'id-ID');
 export const locale = loc;   // dipakai halaman lain untuk memformat tanggal
 
-export const usd = (v, d = 2) => (v == null || Number.isNaN(v)) ? '—'
+const rawUsd = (v, d = 2) => (v == null || Number.isNaN(v)) ? '—'
   : (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString(loc(), { minimumFractionDigits: d, maximumFractionDigits: d });
+// Sensor nilai (privacy.js): tanda minus ikut ditutup — "rugi" pun sudah bocoran.
+// Tanpa sensor: hanya untuk angka contoh yang bukan uang kita (pratinjau di Pengaturan).
+export const plainUsd = rawUsd;
+export const usd = (v, d = 2) => (v == null || Number.isNaN(v) || !isHidden() ? rawUsd(v, d) : '$' + MASK);
 // Angka besar yang cuma perlu dibaca sekilas (volume, likuiditas, MCap). Di atas
 // sejuta, satuan 'k' berhenti membantu — "$3200.00k" harus dihitung dulu sebelum
 // terbaca sebagai tiga juta.
 export const kUsd = (v) => {
   const a = Math.abs(v);
-  if (!(a >= 1000)) return usd(v);
+  if (!(a >= 1000)) return rawUsd(v);   // angka publik: tidak ikut sensor (privacy.js)
   const [d, unit] = a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : [1e3, 'k'];
   return (v < 0 ? '−$' : '$') + (a / d).toFixed(2) + unit;
 };
@@ -86,6 +91,7 @@ export function price(p) {
 // dengan angka penting — token bisa 6 desimal (USDG) atau 18 (kebanyakan sisanya).
 export const qty = (raw, dec) => (raw == null ? null : Number(BigInt(String(raw))) / 10 ** (dec ?? 18));
 export const fmtQty = (v) => (v == null || !Number.isFinite(v) ? '—'
+  : isHidden() ? MASK
   : v >= 1e6 ? v.toLocaleString(loc(), { maximumFractionDigits: 0 })
     : v.toLocaleString(loc(), { maximumSignificantDigits: v >= 1000 ? 6 : 4 }));
 

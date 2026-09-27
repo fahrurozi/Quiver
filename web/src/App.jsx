@@ -2,7 +2,7 @@ import { createContext, lazy, Suspense, useContext, useEffect, useState } from '
 import { Button, Chip, Toast } from '@heroui/react';
 import {
   LayoutDashboard, Layers, ListChecks, Users, SlidersHorizontal, Wallet as WalletIcon,
-  Settings as SettingsIcon, Moon, Sun, Pause, Play, Menu, X, LogOut,
+  Settings as SettingsIcon, Moon, Sun, Pause, Play, Menu, X, LogOut, Eye, EyeOff,
   PlusCircle, ArrowDownUp, BookOpen, MonitorDot,
 } from 'lucide-react';
 import { usePoll, useHash, useTheme } from './hooks';
@@ -10,6 +10,7 @@ import { post } from './api';
 import { short, usd, num } from './fmt';
 import { chainInfo, setChain, CHAIN_ICON } from './chain';
 import { setFx } from './currency';
+import { usePrivacy, setDefaultHidden } from './privacy';
 import { useI18n, LOCALES } from './i18n';
 import { QuiverLogo } from './components/Logo';
 import { AlertBell, useTargetAlerts, setBaseTitle } from './components/TargetAlerts';
@@ -112,7 +113,18 @@ function ModeBadge({ m }) {
   );
 }
 
-function StatusFoot({ status, reload, theme, toggleTheme }) {
+// Sensor nilai portofolio (privacy.js): ikon mata di sebelah tombol tema.
+function PrivacyButton({ hidden, toggle }) {
+  const { t } = useI18n();
+  const label = t(hidden ? 'Tampilkan nilai portofolio' : 'Sensor nilai portofolio');
+  return (
+    <Button size="sm" variant="ghost" isIconOnly aria-label={label} aria-pressed={hidden} onPress={toggle}>
+      <span title={label}>{hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</span>
+    </Button>
+  );
+}
+
+function StatusFoot({ status, reload, theme, toggleTheme, privacy }) {
   const { t, locale, setLocale } = useI18n();
   const m = status?.mode;
   const pause = async () => { await post('/api/mode', { paused: !m?.paused }); reload(); };
@@ -149,6 +161,7 @@ function StatusFoot({ status, reload, theme, toggleTheme }) {
           <Button size="sm" variant="ghost" isIconOnly aria-label={t('Ganti tema')} onPress={toggleTheme}>
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
+          <PrivacyButton hidden={privacy[0]} toggle={privacy[1]} />
           <AlertBell placement="top" variant="ghost" iconClass="size-4" />
           {/* Hanya saat gerbang token menyala; tanpa token tidak ada sesi yang bisa ditutup. */}
           {m?.auth && (
@@ -252,6 +265,9 @@ export default function App() {
   const param = rest.join('/') || null;
   const [theme, toggleTheme] = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Sensor nilai: App ikut tergambar ulang saat sakelarnya berubah, jadi seluruh
+  // halaman memformat ulang angkanya lewat usd()/fmtQty() yang sudah tahu keadaannya.
+  const privacy = usePrivacy();
   const { data: status, error: statusError, reload } = usePoll('/api/overview', 5000);
   // Layar pembuka ditutup begitu status pertama (atau galatnya) tiba.
   useEffect(() => { if (status || statusError) hideSplash(); }, [status, statusError]);
@@ -260,6 +276,8 @@ export default function App() {
   useEffect(() => { if (status?.chain?.key) setChain(status.chain); }, [status?.chain?.key]);
   // Kurs mata uang kedua ikut di poll yang sama; komponen <Fx> yang membacanya.
   useEffect(() => { setFx(status?.fx || null); }, [status?.fx?.currency, status?.fx?.rate]);
+  // Sensor nilai bawaan dari Pengaturan → Tampilan; ikon mata menimpanya per tab.
+  useEffect(() => { if (status && 'hideValues' in status) setDefaultHidden(status.hideValues); }, [status?.hideValues]);
   const chain = status?.chain?.key ? status.chain : chainInfo();
   // Judul tab ikut angka hidup: "Quiver · $1.234,56 · +$56,78" (digulir, lihat setBaseTitle) — total portofolio dan
   // PnL (bersih kalau modal terlacak, kalau tidak PnL posisi), sama dengan kartu di
@@ -268,8 +286,9 @@ export default function App() {
   useEffect(() => {
     if (!w) return;
     const pnl = w.netPnl ?? w.pnl;
-    setBaseTitle(`Quiver · ${usd(w.value)} · ${pnl > 0 ? '+' : ''}${usd(pnl)}`);
-  }, [w?.value, w?.pnl, w?.netPnl]);
+    // Sensor nilai: judul tab terbaca dari mana saja (taskbar, rekaman layar) — kosongkan.
+    setBaseTitle(privacy[0] ? 'Quiver' : `Quiver · ${usd(w.value)} · ${pnl > 0 ? '+' : ''}${usd(pnl)}`);
+  }, [w?.value, w?.pnl, w?.netPnl, privacy[0]]);
   const Page = PAGES[page] || Overview;
   useTargetAlerts();
 
@@ -288,7 +307,7 @@ export default function App() {
             <div className="mb-3 px-0.5"><SearchTrigger /></div>
             <NavLinks page={page} />
           </div>
-          <div data-reveal="nav"><StatusFoot status={status} reload={reload} theme={theme} toggleTheme={toggleTheme} /></div>
+          <div data-reveal="nav"><StatusFoot status={status} reload={reload} theme={theme} toggleTheme={toggleTheme} privacy={privacy} /></div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -298,6 +317,7 @@ export default function App() {
             <div className="flex items-center gap-1" data-reveal="nav">
               <span className="mr-1 hidden min-[360px]:inline"><ModeBadge m={status?.mode} /></span>
               <SearchTrigger compact />
+              <PrivacyButton hidden={privacy[0]} toggle={privacy[1]} />
               <AlertBell placement="bottom" variant="ghost" iconClass="size-4" />
               <Button size="sm" variant="ghost" isIconOnly aria-label={t('Ganti tema')} onPress={toggleTheme}>
                 {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -310,7 +330,7 @@ export default function App() {
           {menuOpen && (
             <div className="border-b border-border bg-surface px-2 py-3 lg:hidden">
               <NavLinks page={page} onPick={() => setMenuOpen(false)} />
-              <div className="mt-3"><StatusFoot status={status} reload={reload} theme={theme} toggleTheme={toggleTheme} /></div>
+              <div className="mt-3"><StatusFoot status={status} reload={reload} theme={theme} toggleTheme={toggleTheme} privacy={privacy} /></div>
             </div>
           )}
 

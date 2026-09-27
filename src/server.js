@@ -785,6 +785,9 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         // Mata uang kedua: dasbor menempelkannya kecil-kecil di samping angka dolar.
         // Ikut di sini supaya semua halaman mendapat kursnya dari poll yang sudah ada.
         fx: fx.view(currencyOf(cfg)),
+        // Sensor nilai bawaan (Pengaturan → Tampilan): tiap tab baru dasbor dan mini
+        // app mulai tersensor; ikon mata cuma membukanya untuk tab itu.
+        hideValues: !!cfg.display?.hide_values,
         leftovers: leftoverRows(), leftoverRetrySec: engine.leftoverRetrySec ? engine.leftoverRetrySec() : 5,
       };
     },

@@ -28,8 +28,16 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 const nf = (v, d = 2) => Math.abs(v).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : ''}${nf(v, d)}`);
-const usd = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : ''}$${nf(v, d)}`);
-const sgn = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : '+'}$${nf(v, d)}`);
+// Sensor nilai (sama dengan dasbor, lihat web/src/privacy.js): bawaannya dari
+// Pengaturan → Tampilan lewat /api/overview; ikon mata di header membukanya untuk
+// sesi mini app ini saja. Tanda +/− ikut ditutup — "rugi" pun sudah bocoran.
+const MASK = '$•••••';
+let intip = null;   // null = ikut bawaan; true/false = pilihan ikon mata sesi ini
+const tersensor = () => (intip != null ? !intip
+  : S.ov && 'hideValues' in S.ov ? !!S.ov.hideValues
+    : (() => { try { return localStorage.getItem('lpcopy-privacy-default') === '1'; } catch { return false; } })());
+const usd = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : tersensor() ? MASK : `${v < 0 ? '−' : ''}$${nf(v, d)}`);
+const sgn = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : tersensor() ? MASK : `${v < 0 ? '−' : '+'}$${nf(v, d)}`);
 const pct = (v, d = 1) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : '+'}${nf(v, d)}%`);
 const tone = (v) => (v > 0.005 ? 'up' : v < -0.005 ? 'down' : '');
 const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—');
@@ -423,17 +431,25 @@ const IKON = {
   aktivitas: '<path d="M4 6h16M4 12h16M4 18h10"/>',
 };
 const JUDUL = { ringkasan: 'Ringkasan', posisi: 'Posisi', aktivitas: 'Aktivitas' };
+// Ikon mata (lucide eye / eye-off), sama dengan tombol sensor di dasbor.
+const MATA = '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>';
+const MATA_TUTUP = '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>';
 
 function gambar() {
   const app = $('#app');
   if (!app.firstChild) {
-    app.append(el(`<header class="top">${LOGO}<span id="chip"></span><span class="right"><span id="spin"></span></span></header>`));
+    app.append(el(`<header class="top">${LOGO}<span id="chip"></span><span class="right"><span id="spin"></span><button id="eye" type="button" class="eye"></button></span></header>`));
     app.append(el('<main id="view"></main>'));
     app.append(el(`<nav class="tabs">${Object.keys(JUDUL).map((k) =>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">${IKON[k]}</svg>${JUDUL[k]}</button>`).join('')}</nav>`));
   }
   $('#chip').innerHTML = modeBadge(S.ov?.mode);
   $('#spin').innerHTML = S.memuat || S.sibuk ? '<span class="spin"></span>' : '';
+  const sensor = tersensor();
+  const eye = $('#eye');
+  eye.setAttribute('aria-pressed', String(sensor));
+  eye.setAttribute('aria-label', sensor ? 'Tampilkan nilai' : 'Sensor nilai');
+  eye.innerHTML = `<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">${sensor ? MATA_TUTUP : MATA}</svg>`;
   for (const b of document.querySelectorAll('nav.tabs button')) b.classList.toggle('on', b.dataset.tab === S.tab);
   $('nav.tabs').style.display = S.detail ? 'none' : '';
   $('#view').innerHTML = S.detail ? layarDetail()
@@ -524,6 +540,7 @@ async function kirim(fn, pesanSukses, sesudah) {
 
 // ---- interaksi ------------------------------------------------------------
 document.addEventListener('click', (ev) => {
+  if (ev.target.closest('#eye')) { haptic('light'); intip = tersensor(); return gambar(); }
   const seg = ev.target.closest('[data-seg]');
   if (seg) {
     haptic('light');

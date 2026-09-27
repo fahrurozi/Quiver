@@ -9,6 +9,7 @@
 // seperti identitas chain — tidak ada permintaan jaringan dari peramban di sini.
 import { useEffect, useState } from 'react';
 import { getLocale } from './i18n';
+import { isHidden } from './privacy';
 
 let current = null;          // { currency, rate, at, stale } atau null = dolar saja
 const listeners = new Set();
@@ -54,4 +55,6 @@ export function fxFormat(v, fx = current) {
   return (n < 0 ? '−' : '') + s;
 }
 // Memakai mata uang yang sedang aktif di dasbor.
-export const fxText = (v) => fxFormat(v, current);
+// Sensor nilai (privacy.js): "≈ •••" tidak menambah apa pun, jadi dihilangkan.
+// Hanya di sini, bukan di fxFormat — contoh di Pengaturan bukan uang kita.
+export const fxText = (v) => (isHidden() ? null : fxFormat(v, current));

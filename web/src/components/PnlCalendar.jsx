@@ -8,6 +8,7 @@ import { Button } from '@heroui/react';
 import { Empty } from './ui';
 import { usd, kUsd, tone } from '../fmt';
 import { useI18n } from '../i18n';
+import { isHidden } from '../privacy';
 
 const pad = (n) => String(n).padStart(2, '0');
 const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -61,7 +62,8 @@ export default function PnlCalendar({ daily, counts, empty = 'Belum ada posisi t
           {n > 1 && <span className="num hidden sm:inline">×{n}</span>}
         </span>
         {v != null && <span className={`num truncate text-[0.6875rem] font-semibold ${tone(v)}`}>
-          <span className="hidden sm:inline">{kUsd(v)}</span>
+          {/* PnL kita sendiri: kUsd sengaja tidak ikut sensor, jadi ditutup di sini */}
+          <span className="hidden sm:inline">{isHidden() ? usd(v) : kUsd(v)}</span>
           {/* HP: dibulatkan tanpa sen supaya muat di sel ±45px */}
           <span className="sm:hidden">{Math.abs(v) >= 10 ? usd(v, 0) : usd(v, 1)}</span>
         </span>}

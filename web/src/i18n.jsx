@@ -1160,6 +1160,17 @@ const EN = {
   'ambil dari otomasi': 'take back from automation',
   'titip ke otomasi': 'hand over to automation',
 
+  // sensor nilai portofolio
+  'Sensor nilai portofolio': 'Hide portfolio values',
+  'Tampilkan nilai portofolio': 'Show portfolio values',
+  'Sensor secara bawaan': 'Hide by default',
+  'Nilai portofolio kini tersensor secara bawaan': 'Portfolio values are now hidden by default',
+  'Nilai portofolio kini tampil secara bawaan': 'Portfolio values are now shown by default',
+  'Menutup semua nilai dolar milik kita — saldo, modal, PnL, fee, dan jumlah token — dengan $•••••. Persen dan data pasar tetap terlihat. Berguna untuk berbagi layar, merekam, atau membuka dasbor di tempat umum.':
+    'Covers every dollar value of ours — balance, capital, PnL, fees and token amounts — with $•••••. Percentages and market data stay visible. Useful for screen sharing, recording, or opening the dashboard in public.',
+  'Setiap kali dasbor atau mini app Telegram dibuka, nilainya sudah tersensor. Ikon mata di sebelah tombol tema tetap bisa membukanya — hanya untuk tab itu, sampai tab ditutup.':
+    'Every time the dashboard or the Telegram mini app opens, values start hidden. The eye icon next to the theme button can still reveal them — for that tab only, until it is closed.',
+
   // sisi target atas posisi kita (laci posisi bot)
   'Posisi yang kita tiru': 'The position we mirror',
   'Tidak meniru siapa pun': 'Mirrors nobody',
@@ -1208,6 +1219,7 @@ const EN = {
   'Mesin': 'Engine',
   'Tampilan': 'Display',
   'Mata uang kedua di samping dolar': 'A second currency next to the dollar',
+  'Sensor nilai dan mata uang kedua': 'Value privacy and a second currency',
   'Keamanan': 'Security',
   // mata uang kedua
   'Mata uang kedua': 'Second currency',

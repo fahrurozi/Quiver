@@ -198,6 +198,27 @@ test('pengaturan: kunci privat dari .env menonaktifkan ganti/lepas wallet', asyn
   });
 });
 
+// Sensor nilai bawaan dan mata uang kedua berbagi satu rute; menyimpan yang satu
+// tidak boleh menghapus yang lain.
+test('pengaturan: sensor nilai bawaan tersimpan tanpa menyentuh mata uang', async () => {
+  const dir = tmp();
+  const cfg = baseCfg();
+  cfg.display = { currency: 'IDR' };
+  const { call, cfgPath } = routes(cfg, dir);
+  assert.strictEqual((await call('GET /api/settings')).display.hide_values, false);
+  const r = await call('POST /api/settings/display', { hide_values: true });
+  assert.ok(r.ok && r.hide_values === true, JSON.stringify(r));
+  let disk = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+  assert.deepStrictEqual(disk.display, { currency: 'IDR', hide_values: true });
+  assert.strictEqual((await call('GET /api/settings')).display.hide_values, true);
+  // ganti mata uang: sensor tetap menyala
+  assert.ok((await call('POST /api/settings/display', { currency: 'EUR' })).ok);
+  disk = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+  assert.deepStrictEqual(disk.display, { currency: 'EUR', hide_values: true });
+  assert.ok((await call('POST /api/settings/display', { hide_values: false })).ok);
+  assert.strictEqual(JSON.parse(fs.readFileSync(cfgPath, 'utf8')).display.hide_values, false);
+});
+
 (async () => {
   let ok = 0, bad = 0;
   for (const [n, f] of tests) {

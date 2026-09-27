@@ -10,6 +10,7 @@ import { Pair, SyncState, FeeCell } from './Positions';
 import { GmgnProvider } from '../components/GmgnDot';
 import PositionHistory from '../components/PositionHistory';
 import { usd, kUsd, tone, num, pct, age, ago, short, txHref, aprOf, aprText, locale as fmtLocale, TXKIND, TXSTATUS } from '../fmt';
+import { isHidden, MASK } from '../privacy';
 import { useI18n, reason } from '../i18n';
 import { useClosePosition } from '../useClosePosition';
 
@@ -92,8 +93,8 @@ function Composition({ now, ethUsd }) {
   ].filter((r, i) => i === 0 || r.v > 0.005);
   const idle = c ? [
     { k: 'USDG', v: c.usdg },
-    { k: 'WETH', v: c.weth * perEth, sub: `${num(c.weth, 5)} WETH` },
-    { k: 'ETH', v: c.eth * perEth, sub: `${num(c.eth, 5)} ETH` },
+    { k: 'WETH', v: c.weth * perEth, sub: `${isHidden() ? MASK : num(c.weth, 5)} WETH` },
+    { k: 'ETH', v: c.eth * perEth, sub: `${isHidden() ? MASK : num(c.eth, 5)} ETH` },
   ].filter((r) => r.v > 0.005).sort((x, y) => y.v - x.v).map((r, i) => ({ ...r, color: tint('var(--foreground)', [36, 24, 15][i] ?? 15) })) : [];
   const all = [...working, ...idle];
   const total = Math.max(1e-9, sum(all, (r) => r.v));

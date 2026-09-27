@@ -267,6 +267,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         prices: { eth_usd: cfg.prices?.eth_usd ?? 2500, auto_eth_price: cfg.prices?.auto_eth_price !== false },
         display: {
           currency: currencyOf(cfg),
+          hide_values: !!cfg.display?.hide_values,
           currencies: Object.entries(CURRENCIES).map(([code, name]) => ({ code, name })),
           fx: fx ? fx.view(currencyOf(cfg)) : null,
         },
@@ -436,8 +437,14 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     // ---- tampilan: mata uang kedua ----
     // Hanya keterangan di dasbor. Mesin, batas anggaran, dan semua perhitungan tetap
     // dalam dolar — mengganti pilihan di sini tidak menyentuh satu pun keputusan bot.
+    // Sebagian: hanya kolom yang dikirim yang diubah — sakelar sensor tidak boleh
+    // ikut menghapus pilihan mata uang, begitu juga sebaliknya.
     'POST /api/settings/display': async (req) => {
       const b = await readBody(req);
+      if ('hide_values' in b) {
+        cfg.display = { ...(cfg.display || {}), hide_values: !!b.hide_values };
+        if (!('currency' in b)) { saveCfg(); return { ok: true, hide_values: cfg.display.hide_values }; }
+      }
       const code = String(b.currency || '').trim().toUpperCase();
       if (code && !CURRENCIES[code]) return { error: 'Mata uang itu tidak ada di daftar.' };
       cfg.display = { ...(cfg.display || {}), currency: code || null };
