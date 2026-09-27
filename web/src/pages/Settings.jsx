@@ -9,7 +9,7 @@ import { useStatus } from '../App';
 import { PageHeader, Loading, Notice, Text, Pick, Toggle, ask } from '../components/ui';
 import { num, usd, plainUsd, locale as fmtLocale, ago } from '../fmt';
 import { fxFormat } from '../currency';
-import { followDefault } from '../privacy';
+import { usePrivacy } from '../privacy';
 import { useI18n, translate as tt } from '../i18n';
 
 const amt = (v, d = 4) => (v == null ? '—' : Number(v).toLocaleString(fmtLocale(), { maximumFractionDigits: d }));
@@ -632,22 +632,22 @@ function DisplayTab({ d, reload }) {
     say(r, 'Kurs diperbarui');
     if (!r.error) reload();
   };
-  // Sensor bawaan: dicatat di config server, jadi berlaku untuk tiap peramban dan
-  // mini app Telegram — bukan cuma peramban ini. Tab ini langsung ikut.
-  const hideDefault = async (v) => {
+  // Sakelar yang sama dengan ikon mata (privacy.js): nilainya diambil dari sana,
+  // bukan dari muatan halaman ini, supaya tidak basi kalau mata ditekan di tempat lain.
+  const [hidden, toggleHidden] = usePrivacy();
+  const hide = async () => {
     setBusy('hide');
-    const r = await post('/api/settings/display', { hide_values: v });
+    const r = await toggleHidden();
     setBusy('');
-    say(r, v ? 'Nilai portofolio kini tersensor secara bawaan' : 'Nilai portofolio kini tampil secara bawaan');
-    if (!r.error) { followDefault(v); reload(); }
+    say(r, hidden ? 'Nilai portofolio kini tampil' : 'Nilai portofolio kini tersensor');
   };
   // Contoh dipakai supaya pilihannya terlihat hasilnya sebelum pindah halaman.
   const sample = fx?.rate ? fxFormat(1234.56, fx) : null;
   return (
     <div className="flex flex-col gap-10">
     <Section title="Sensor nilai portofolio" desc="Menutup semua nilai dolar milik kita — saldo, modal, PnL, fee, dan jumlah token — dengan $•••••. Persen dan data pasar tetap terlihat. Berguna untuk berbagi layar, merekam, atau membuka dasbor di tempat umum.">
-      <Toggle label="Sensor secara bawaan" value={dp.hide_values} onChange={hideDefault} isDisabled={busy === 'hide'}
-        desc="Setiap kali dasbor atau mini app Telegram dibuka, nilainya sudah tersensor. Ikon mata di sebelah tombol tema tetap bisa membukanya — hanya untuk tab itu, sampai tab ditutup." />
+      <Toggle label="Sensor nilai" value={hidden} onChange={hide} isDisabled={busy === 'hide'}
+        desc="Sama dengan ikon mata di sebelah tombol tema dan di mini app Telegram — satu sakelar untuk semuanya. Berlaku di semua tab dan perangkat, dan tetap tersimpan sampai dimatikan lagi." />
     </Section>
     <Section title="Mata uang kedua" desc="Semua nominal di dasbor dihitung dalam dolar — itu satuan yang dipakai pool, harga token, dan seluruh perhitungan PnL. Pilihan di sini menambahkan nilai yang sama dalam mata uang lain, ditulis kecil di sebelah angka dolarnya, supaya nominalnya punya rasa besaran. Angka utamanya tidak berubah.">
       <div className="grid gap-5 md:grid-cols-2">

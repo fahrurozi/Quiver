@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useState } from 'react';
-import { Button, Chip, Toast } from '@heroui/react';
+import { Button, Chip, Toast, toast } from '@heroui/react';
 import {
   LayoutDashboard, Layers, ListChecks, Users, SlidersHorizontal, Wallet as WalletIcon,
   Settings as SettingsIcon, Moon, Sun, Pause, Play, Menu, X, LogOut, Eye, EyeOff,
@@ -113,12 +113,15 @@ function ModeBadge({ m }) {
   );
 }
 
-// Sensor nilai portofolio (privacy.js): ikon mata di sebelah tombol tema.
+// Sensor nilai portofolio (privacy.js): ikon mata di sebelah tombol tema. Satu
+// sakelar untuk semua — tersimpan di server, jadi tab, perangkat, dan mini app lain
+// ikut dalam satu putaran poll.
 function PrivacyButton({ hidden, toggle }) {
   const { t } = useI18n();
   const label = t(hidden ? 'Tampilkan nilai portofolio' : 'Sensor nilai portofolio');
   return (
-    <Button size="sm" variant="ghost" isIconOnly aria-label={label} aria-pressed={hidden} onPress={toggle}>
+    <Button size="sm" variant="ghost" isIconOnly aria-label={label} aria-pressed={hidden}
+      onPress={async () => { const r = await toggle(); if (r?.error) toast.danger(r.error); }}>
       <span title={label}>{hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</span>
     </Button>
   );

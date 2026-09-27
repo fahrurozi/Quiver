@@ -1163,13 +1163,13 @@ const EN = {
   // sensor nilai portofolio
   'Sensor nilai portofolio': 'Hide portfolio values',
   'Tampilkan nilai portofolio': 'Show portfolio values',
-  'Sensor secara bawaan': 'Hide by default',
-  'Nilai portofolio kini tersensor secara bawaan': 'Portfolio values are now hidden by default',
-  'Nilai portofolio kini tampil secara bawaan': 'Portfolio values are now shown by default',
   'Menutup semua nilai dolar milik kita — saldo, modal, PnL, fee, dan jumlah token — dengan $•••••. Persen dan data pasar tetap terlihat. Berguna untuk berbagi layar, merekam, atau membuka dasbor di tempat umum.':
     'Covers every dollar value of ours — balance, capital, PnL, fees and token amounts — with $•••••. Percentages and market data stay visible. Useful for screen sharing, recording, or opening the dashboard in public.',
-  'Setiap kali dasbor atau mini app Telegram dibuka, nilainya sudah tersensor. Ikon mata di sebelah tombol tema tetap bisa membukanya — hanya untuk tab itu, sampai tab ditutup.':
-    'Every time the dashboard or the Telegram mini app opens, values start hidden. The eye icon next to the theme button can still reveal them — for that tab only, until it is closed.',
+  'Sensor nilai': 'Hide values',
+  'Nilai portofolio kini tersensor': 'Portfolio values are now hidden',
+  'Nilai portofolio kini tampil': 'Portfolio values are now shown',
+  'Sama dengan ikon mata di sebelah tombol tema dan di mini app Telegram — satu sakelar untuk semuanya. Berlaku di semua tab dan perangkat, dan tetap tersimpan sampai dimatikan lagi.':
+    'The same as the eye icon next to the theme button and in the Telegram mini app — one switch for everything. It applies to every tab and device, and stays until turned off again.',
 
   // sisi target atas posisi kita (laci posisi bot)
   'Posisi yang kita tiru': 'The position we mirror',

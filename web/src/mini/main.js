@@ -28,14 +28,29 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 const nf = (v, d = 2) => Math.abs(v).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : ''}${nf(v, d)}`);
-// Sensor nilai (sama dengan dasbor, lihat web/src/privacy.js): bawaannya dari
-// Pengaturan → Tampilan lewat /api/overview; ikon mata di header membukanya untuk
-// sesi mini app ini saja. Tanda +/− ikut ditutup — "rugi" pun sudah bocoran.
+// Sensor nilai (sama dengan dasbor, lihat web/src/privacy.js): SATU sakelar untuk
+// semuanya — config `display.hide_values` di server, dibaca lewat /api/overview.
+// Ikon mata di header menulis ke sana juga, jadi dasbor yang terbuka di laptop ikut.
+// Tanda +/− ikut ditutup — "rugi" pun sudah bocoran.
 const MASK = '$•••••';
-let intip = null;   // null = ikut bawaan; true/false = pilihan ikon mata sesi ini
-const tersensor = () => (intip != null ? !intip
+let sensorLokal = null;   // pilihan yang sedang disimpan ke server; null = ikut server
+const tersensor = () => (sensorLokal != null ? sensorLokal
   : S.ov && 'hideValues' in S.ov ? !!S.ov.hideValues
     : (() => { try { return localStorage.getItem('lpcopy-privacy-default') === '1'; } catch { return false; } })());
+async function gantiSensor() {
+  const next = !tersensor();
+  sensorLokal = next;
+  gambar();
+  try {
+    await api('/api/settings/display', { hide_values: next });
+    if (S.ov) S.ov.hideValues = next;
+    try { localStorage.setItem('lpcopy-privacy-default', next ? '1' : '0'); } catch { /* abaikan */ }
+  } catch (e) {
+    beritahu(`Sensor gagal disimpan: ${e.message}`);
+  }
+  sensorLokal = null;
+  gambar();
+}
 const usd = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : tersensor() ? MASK : `${v < 0 ? '−' : ''}$${nf(v, d)}`);
 const sgn = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : tersensor() ? MASK : `${v < 0 ? '−' : '+'}$${nf(v, d)}`);
 const pct = (v, d = 1) => (v == null || Number.isNaN(v) ? '—' : `${v < 0 ? '−' : '+'}${nf(v, d)}%`);
@@ -540,7 +555,7 @@ async function kirim(fn, pesanSukses, sesudah) {
 
 // ---- interaksi ------------------------------------------------------------
 document.addEventListener('click', (ev) => {
-  if (ev.target.closest('#eye')) { haptic('light'); intip = tersensor(); return gambar(); }
+  if (ev.target.closest('#eye')) { haptic('light'); return gantiSensor(); }
   const seg = ev.target.closest('[data-seg]');
   if (seg) {
     haptic('light');
