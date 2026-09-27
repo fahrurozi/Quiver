@@ -2,6 +2,8 @@
 # Build tampilan (React + HeroUI) lalu kirim ke VPS Singapore dan restart.
 # config.json, .env, data/, dan logs/ SENGAJA tidak ikut: config & .env berisi token akses & API key,
 # data berisi kursor blok — kalau ikut ter-push, kursor mundur dan aksi lama dinilai ulang.
+# config.example.json justru IKUT: ia template yang dibaca wizard pemasangan (src/setup.js),
+# jadi instance baru yang lahir dari deploy.sh saja tetap bisa dipasang lewat peramban.
 #
 # Satu VPS bisa menampung beberapa instance. Nama instance = nama folder di server = nama proses PM2.
 #   ./deploy.sh            → ~/lpcopy  (pm2: lpcopy)
@@ -18,7 +20,7 @@ fi
 echo "build tampilan…"
 (cd web && npx vite build --logLevel warn)
 rsync -az --exclude node_modules --exclude data --exclude logs --exclude config.json \
-  src test public package.json README.md lp ecosystem.config.cjs deploy.sh .env.example "$HOST:~/$NAME/"
+  src test public package.json README.md lp ecosystem.config.cjs deploy.sh .env.example config.example.json "$HOST:~/$NAME/"
 ssh "$HOST" "mkdir -p ~/$NAME/web"
 # Unggah aset dulu; tab lama tetap membutuhkan chunk dari build sebelumnya.
 # index dipublikasikan terakhir, setelah semua berkas yang dirujuknya tersedia.

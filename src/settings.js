@@ -553,4 +553,4 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
   };
 }
 
-module.exports = { createSettingsRoutes, maskUrl, probeRpc };
+module.exports = { createSettingsRoutes, maskUrl, probeRpc, hasSecret };

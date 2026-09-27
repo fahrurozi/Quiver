@@ -72,20 +72,48 @@ The example configuration starts in **simulation mode**, binds the dashboard to 
 
 The optional `./lp` and `deploy.sh` wrappers require **zsh**. The Node commands below work without those wrappers.
 
-### Install and build
+### Install
 
 From a checkout of this repository:
 
 ```sh
 npm ci
 npm ci --prefix web
+npm run build --prefix web
+npm start
+```
+
+### First run: the setup wizard
+
+With no `config.json` present, `npm start` opens the setup wizard instead of starting the bot. It prints a one-time setup code in the terminal and serves a seven-step page on the dashboard address ([localhost:8799](http://127.0.0.1:8799) by default):
+
+1. **Start** — paste the setup code.
+2. **Dashboard access** — access token (generated for you), optional external https URL, and the secondary display currency.
+3. **Wallet** — generate a new signing wallet, import a private key, or skip and stay in simulation.
+4. **Chains and RPC** — which chains to run, which endpoints to use, and a per-endpoint test that fills in the `no_logs`, `max_log_blocks`, and `archive` flags from what the endpoint actually supports. An optional Alchemy key adds an Alchemy endpoint to every chain that has one.
+5. **Notifications** — Telegram bot token, ntfy topic, and GMGN key, all optional.
+6. **Capital and targets** — simulation or live, entry size and exposure limits, and the first target wallets.
+7. **Review** — write the files and start.
+
+Finishing writes `config.json` and `.env` with mode 600, writes the signing key to `~/.lpcopy/key` with mode 600, and boots the engine in the same process; the page follows to the dashboard, and no restart is needed.
+
+The wizard is bilingual and **defaults to English**, with an EN/ID switch in its header. The choice is stored under the same `lpcopy-lang` key the dashboard uses, so the dashboard opens in the language chosen during setup; a language already saved in that browser wins over the English default.
+
+Credentials never reach `config.json`: the access token, bot token, ntfy topic, and GMGN and Alchemy keys go to `.env`, and the Alchemy endpoint references its key as `${ALCHEMY_KEY}`. The private key is written to the key file rather than `LPCOPY_PRIVATE_KEY` so the dashboard can still rotate it later.
+
+The setup code is printed to stdout and stored in `data/setup-code.txt` until setup finishes; under pm2, read it with `pm2 logs` or `cat data/setup-code.txt`. The wizard demands it on every request, because the dashboard address is often published through a tunnel even when the server itself binds to loopback.
+
+Re-run the wizard at any time with `npm run setup` (or `LPCOPY_SETUP=1 npm start`). It starts from the existing configuration, adds rather than replaces targets, and moves a replaced key file to a dated backup instead of overwriting it. An existing `config.json` never triggers the wizard on its own.
+
+If `config.json` is missing but `data/lpcopy.db` already holds this instance's history, the wizard refuses to run and the process exits with an error: that is a lost configuration, not a new install, and writing a fresh one over a populated database would be worse than stopping. Ask for it explicitly (`LPCOPY_SETUP=1 npm start`) to override. Under pm2 the wizard also logs that the bot is *not* running, because pm2 otherwise reports the process as online.
+
+Configuration can also be prepared by hand, in which case the wizard never appears:
+
+```sh
 cp config.example.json config.json
 cp .env.example .env
 chmod 600 .env
-npm run build --prefix web
 ```
-
-Edit `config.json` for non-secret settings and `.env` for credentials. Keep `mode.dry_run` set to `true` during initial setup.
 
 ### Start
 
@@ -238,7 +266,8 @@ Vite proxies `/api` requests to `http://127.0.0.1:8799`. Use the Vite address pr
 
 | Command | Purpose |
 | --- | --- |
-| `node --no-warnings src/index.js` | Start the application. |
+| `node --no-warnings src/index.js` | Start the application (or the setup wizard when `config.json` is missing). |
+| `npm run setup` | Re-run the setup wizard against the existing configuration. |
 | `node --no-warnings src/index.js scout <address> [blocks] [--chain=bsc]` | Research a wallet within a specified block window. |
 | `node --no-warnings src/index.js add <address> "label" [--chain=bsc]` | Register a target (default chain: robinhood). |
 | `node --no-warnings src/index.js list` | List targets on every chain. |
@@ -314,6 +343,8 @@ Preserve and back up the database separately. Replacing it with a development co
 ```text
 src/                   Backend, execution, research, API, and Telegram
   index.js             Application startup and CLI
+  setup.js             First-run setup: wizard server, config and .env writers
+  setup-page.js        Setup wizard page (server-rendered, no build step)
   networks.js          Chain profiles (contracts, quote assets, venues)
   multichain.js        Per-chain configuration normalisation
   engine.js            Copy engine coordination

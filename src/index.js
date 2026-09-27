@@ -11,6 +11,7 @@ const { scoutWallet } = require('./scout');
 const { Telegram } = require('./telegram');
 const { loadDotEnv, applyEnv, defaultEnvPath, writeCfg } = require('./env');
 const { normalizeCfg, chainView, enabledChains, PRIMARY } = require('./multichain');
+const { setupNeeded, runSetup } = require('./setup');
 const { NETWORKS } = require('./networks');
 
 const ROOT = path.join(__dirname, '..');
@@ -31,6 +32,15 @@ const TAG = { robinhood: 'RH', bsc: 'BSC' };
 const tagOf = (key) => TAG[key] || key.toUpperCase().slice(0, 4);
 
 async function main() {
+  // Pemasangan awal. Tanpa config.json tidak ada yang bisa dinyalakan, jadi wizard-nya
+  // dulu (server kecil di port yang sama), baru boot normal — di proses yang sama,
+  // tanpa restart. Config yang sudah ada tidak pernah memicu ini sendiri; ulangi
+  // dengan `lp setup` atau LPCOPY_SETUP=1.
+  if (setupNeeded({ cfgPath: CFG_PATH, cmd: process.argv[2] })) {
+    const diminta = process.argv[2] === 'setup' || process.env.LPCOPY_SETUP === '1';
+    await runSetup({ root: ROOT, cfgPath: CFG_PATH, envPath: defaultEnvPath(ROOT), diminta, log: console.log });
+    try { DOTENV = loadDotEnv(defaultEnvPath(ROOT)); } catch (e) { console.error(`.env: ${e.message}`); process.exit(1); }
+  }
   const cfg = loadCfg();
   // Bentuk multi-chain (chains.<nama>.*). Config lama dinormalkan di memori; ditulis
   // balik ke disk supaya bentuk barunya terlihat & bisa disunting (writeCfg menjaga

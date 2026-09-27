@@ -25,6 +25,19 @@ const CURRENCIES = {
   AED: 'Dirham UEA', SAR: 'Riyal Saudi', ZAR: 'Rand Afrika Selatan', NGN: 'Naira Nigeria',
 };
 
+// Nama Inggris untuk daftar yang sama — dipakai halaman pemasangan, yang bawaannya
+// Inggris. Kode ISO-nya tetap jadi pegangan; ini cuma keterangan di sebelahnya.
+const CURRENCIES_EN = {
+  IDR: 'Indonesian rupiah', MYR: 'Malaysian ringgit', SGD: 'Singapore dollar', THB: 'Thai baht',
+  VND: 'Vietnamese dong', PHP: 'Philippine peso', INR: 'Indian rupee', CNY: 'Chinese yuan',
+  JPY: 'Japanese yen', KRW: 'South Korean won', HKD: 'Hong Kong dollar', TWD: 'Taiwan dollar',
+  AUD: 'Australian dollar', NZD: 'New Zealand dollar', CAD: 'Canadian dollar',
+  EUR: 'Euro', GBP: 'Pound sterling', CHF: 'Swiss franc', SEK: 'Swedish krona',
+  TRY: 'Turkish lira', RUB: 'Russian ruble', UAH: 'Ukrainian hryvnia', PLN: 'Polish zloty',
+  BRL: 'Brazilian real', MXN: 'Mexican peso', ARS: 'Argentine peso',
+  AED: 'UAE dirham', SAR: 'Saudi riyal', ZAR: 'South African rand', NGN: 'Nigerian naira',
+};
+
 const SOURCES = [
   ['open.er-api.com', 'https://open.er-api.com/v6/latest/USD', (j) => (j && j.result === 'success' ? j.rates : null)],
   ['frankfurter.app', 'https://api.frankfurter.app/latest?base=USD', (j) => (j && j.rates) || null],
@@ -103,4 +116,4 @@ class Fx {
 // tersimpan sebagai null, dan null TIDAK dibaca sebagai "belum pernah diatur".
 const currencyOf = (cfg) => (cfg?.display && 'currency' in cfg.display ? cfg.display.currency || '' : 'IDR');
 
-module.exports = { Fx, CURRENCIES, currencyOf };
+module.exports = { Fx, CURRENCIES, CURRENCIES_EN, currencyOf };

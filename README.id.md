@@ -39,9 +39,69 @@ jaringan BNB diaktifkan untuk app-nya di dasbor Alchemy.
 
 ```
 ./lp                       # jalankan mesin + dashboard (http://127.0.0.1:8799)
+./lp setup                 # ulangi pemasangan (wizard di peramban)
 ./lp scout 0xABC… [blok]   # periksa sebuah wallet sebelum dicopy
 ./lp add 0xABC… "label"    # tambah target dari terminal
 ./lp list                  # daftar target
+```
+
+## Pemasangan awal
+
+Di mesin yang belum punya `config.json`, `npm start` tidak menyalakan bot — ia membuka
+**wizard pemasangan**: satu kode sekali pakai tercetak di terminal, dan halaman tujuh
+langkah disajikan di alamat dasbor (bawaan `http://127.0.0.1:8799`).
+
+```bash
+npm ci
+npm ci --prefix web
+npm run build --prefix web
+npm start                  # -> wizard pemasangan
+```
+
+Langkahnya: **kode pemasangan** → **token akses dasbor** (dibuatkan acak, plus URL
+tunnel dan mata uang pendamping) → **wallet bot** (buat baru / impor kunci privat /
+nanti saja) → **chain & RPC** (tiap endpoint bisa diuji dari halaman itu; hasil ujinya
+langsung mengisi bendera `no_logs`, `max_log_blocks`, `archive`, dan kunci Alchemy
+opsional menambahkan endpointnya sendiri) → **pemberitahuan** (Telegram, ntfy, GMGN —
+boleh dilewati) → **batas modal & target** (simulasi/LIVE, nilai per entry, exposure,
+budget harian, wallet target pertama) → **periksa & simpan**.
+
+Begitu disimpan: `config.json` dan `.env` ditulis mode 600, kunci privat ke
+`~/.lpcopy/key` mode 600, lalu mesin menyala **di proses yang sama** — tanpa restart,
+dan halamannya pindah sendiri ke dasbor.
+
+Halamannya dwibahasa dan **bawaannya Inggris**, dengan tombol EN/ID di pojok kanan
+atas. Pilihannya disimpan di kunci `lpcopy-lang` yang sama dengan dasbor, jadi dasbor
+melanjutkan dengan bahasa yang dipilih di wizard; bahasa yang sudah pernah disimpan di
+peramban itu mengalahkan bawaan Inggris.
+
+Rahasia tidak pernah masuk `config.json`: token dasbor, token bot, topik ntfy, dan
+kunci GMGN/Alchemy ditulis ke `.env`, dan URL Alchemy di config cuma memuat
+`${ALCHEMY_KEY}`. Kunci privat sengaja ke berkas kunci, bukan `LPCOPY_PRIVATE_KEY` —
+supaya tombol ganti/lepas wallet di dasbor tetap hidup.
+
+Kode pemasangan tercetak di stdout dan tersimpan di `data/setup-code.txt` sampai
+pemasangan selesai (`pm2 logs` atau `cat data/setup-code.txt` kalau jalan di bawah
+pm2). Kodenya diminta di setiap permintaan, bukan cuma kalau server terikat ke publik:
+alamat dasbor sering diekspos lewat tunnel walau server-nya sendiri di loopback.
+
+Ulangi kapan saja dengan `npm run setup` / `./lp setup` (atau `LPCOPY_SETUP=1 npm start`).
+Wizard berangkat dari config yang ada, **menambah** target alih-alih menimpanya, dan
+kunci lama dipindah ke berkas cadangan bertanggal — tidak ada yang terhapus diam-diam.
+Config yang sudah ada tidak pernah memicu wizard dengan sendirinya, jadi instance lama
+aman saat deploy.
+
+Kalau `config.json` hilang tapi `data/lpcopy.db` sudah berisi riwayat instance itu, wizard
+**menolak jalan** dan prosesnya berhenti dengan galat: itu config yang hilang, bukan pemasangan
+baru, dan menulis config baru di atas database yang sudah terisi lebih buruk daripada berhenti.
+Paksa dengan `LPCOPY_SETUP=1 npm start` kalau memang disengaja. Di bawah pm2, wizard juga
+mencatat satu baris bahwa bot BELUM jalan — pm2 sendiri tetap melaporkan prosesnya "online".
+
+Mau menyiapkan sendiri tanpa wizard? Salin contohnya, dan wizard-nya tidak akan muncul:
+
+```bash
+cp config.example.json config.json
+cp .env.example .env && chmod 600 .env
 ```
 
 ## Di mana jalannya
