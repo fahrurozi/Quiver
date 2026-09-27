@@ -1,7 +1,8 @@
 'use strict';
 // Uji GET /api/position/history — riwayat satu posisi bot untuk laci di halaman Posisi:
 // transaksi yang menyentuhnya (zap, mint, tutup, jual sisa) dengan jumlah & nilai,
-// dan catatan bot (keputusan + baris log yang menyebut "#<id>").
+// catatan bot (keputusan + baris log yang menyebut "#<id>"), dan sisi target —
+// posisi asli yang ditiru beserta hasil DIA di sana.
 //
 // Jalankan: node test/riwayat.js
 const assert = require('node:assert');
@@ -138,6 +139,39 @@ function isiPosisi(store) {
     assert.deepEqual(h6.events.map((e) => e.hash), ['0xzap6', '0xmint6', '0xburn6']);
     const h7 = await api('GET', '/api/position/history', {}, { id: '7' });
     assert.deepEqual(h7.events.map((e) => e.hash), ['0xzap7', '0xmint7', '0xburn7']);
+  });
+
+  // Laci dulu bercerita cuma tentang kita. Sisi target — dia masuk berapa, keluar
+  // dengan apa — harus ikut dikirim di sini, bukan dicari di halaman lain.
+  await t('sisi target: riset wallet dipakai kalau ada, lengkap dengan aksi terpantau', async () => {
+    store.run(`INSERT INTO positions(id,venue,token_id,pool_ref,token0,token1,status,target,mirror_of,opened_ts,closed_ts,
+      cost_quote,out_quote,quote_symbol) VALUES(30,'v4','3030',?,?,?,'closed',?,'777',?,?,100,120,'USDG')`,
+    POOL, ADDR.usdg, MEME, TARGET, T0 + 20_000, T0 + 300_000);
+    store.run(`INSERT INTO wpositions(wallet,venue,token_id,pool_ref,status,invested_q,returned_q,fees_q,pnl_q,opened_ts,closed_ts)
+      VALUES(?,'v4','777',?,'closed',400,470,25,70,?,?)`, TARGET, POOL, T0 + 10_000, T0 + 280_000);
+    store.run(`INSERT INTO actions(id,ts,block,tx_hash,log_index,target,venue,kind,token_id,pool_ref,token0,token1,value_quote,quote_symbol,liquidity)
+      VALUES(2,?,101,'0xtgtIn',0,?,'v4','increase','777',?,?,?,400,'USDG','1000')`, T0 + 10_000, TARGET, POOL, ADDR.usdg, MEME);
+    store.run(`INSERT INTO actions(id,ts,block,tx_hash,log_index,target,venue,kind,token_id,pool_ref,token0,token1,value_quote,quote_symbol,liquidity)
+      VALUES(3,?,102,'0xtgtOut',0,?,'v4','decrease','777',?,?,?,445,'USDG','-1000')`, T0 + 280_000, TARGET, POOL, ADDR.usdg, MEME);
+    const x = await api('GET', '/api/position/history', {}, { id: '30' });
+    const o = x.position.origin;
+    assert.equal(o.tokenId, '777');
+    // riset wallet: PnL lengkap (fee & sisa token ikut), bukan selisih aksi
+    assert.equal(o.mirror.costUsd, 400); assert.equal(o.mirror.pnlUsd, 70);
+    assert.equal(o.mirror.status, 'closed'); assert.equal(o.mirror.stale, false);
+    assert.ok(Math.abs(o.mirror.pnlPct - 17.5) < 1e-9);
+    // aksi terpantau: pokok saja, dan dia sudah keluar
+    assert.equal(o.watch.inUsd, 400); assert.equal(o.watch.outUsd, 445);
+    assert.equal(o.watch.pnlUsd, 45); assert.equal(o.watch.open, false);
+  });
+
+  // Posisi manual / yang sudah ada sebelum bot: tidak ada sisi target sama sekali,
+  // dan laci harus bisa membedakannya dari target yang belum diriset.
+  await t('sisi target: posisi tanpa target -> origin kosong', async () => {
+    const x = await api('GET', '/api/position/history', {}, { id: '20' });
+    assert.equal(x.position.target, null);
+    assert.equal(x.position.origin.mirror, null); assert.equal(x.position.origin.watch, null);
+    assert.equal(x.position.origin.targetLabel, null);
   });
 
   await t('posisi tidak ada -> error', async () => {

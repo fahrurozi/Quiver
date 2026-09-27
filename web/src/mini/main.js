@@ -377,6 +377,9 @@ function layarDetail() {
       <div class="kv"><span class="k">Fee belum diklaim</span><span class="v num ${p.feeUsd > 0.005 ? 'up' : ''}">${usd(p.feeUsd)}${apr != null ? ` <span class="xs muted">APR ${aprText(apr)}</span>` : ''}</span></div>
       ${p.ilUsd != null ? `<div class="kv"><span class="k">Kerugian tak permanen</span><span class="v num ${tone(p.ilUsd)}">${usd(p.ilUsd)}</span></div>` : ''}
       <div class="kv"><span class="k">Disalin dari</span><span class="v">${esc(p.targetLabel || short(p.target) || 'manual')}</span></div>
+      ${p.target ? `<div class="kv"><span class="k">Hasil dia</span><span class="v">${p.mirror
+    ? `<span class="num ${tone(p.mirror.pnlUsd)}">${sgn(p.mirror.pnlUsd)}</span> <span class="xs muted num">${pct(p.mirror.pnlPct)}</span>${p.mirror.stale ? ' <span class="xs muted">masih terbuka</span>' : ''}`
+    : '<span class="muted">wallet belum dipindai</span>'}</span></div>` : ''}
       <div class="kv"><span class="k">NFT</span><span class="v num">#${esc(p.token_id ?? p.id)}</span></div>
       <div class="kv"><span class="k">Dibuka</span><span class="v">${esc(ago(p.opened_ts))}</span></div>
     </div>

@@ -5,6 +5,7 @@
 // dan baris log yang menyebut posisi ini. Grafik harga tetap di halaman detail.
 import { useEffect, useState } from 'react';
 import PositionSnapshot from './PositionSnapshot';
+import TargetSide from './TargetSide';
 import { Button, Chip, Drawer } from '@heroui/react';
 import { X, ChartCandlestick } from 'lucide-react';
 import { get } from '../api';
@@ -281,6 +282,7 @@ export default function PositionHistory({ id, onClose }) {
                       sub={p.costUsd > 0 ? pct((p.feesUsd / p.costUsd) * 100, 2).replace('+', '') : null} />
                     <Stat label="Modal" value={usd(p.costUsd)} sub={closed ? t('hasil {v}', { v: usd(p.outUsd) }) : null} />
                   </div>
+                  <TargetSide p={p} />
                   <GmgnPanel token={baseTokenOf(p)} />
                   {!closed && <PnlWhy p={p} />}
                   <Ongkos c={p.cost} cost={p.costUsd} />

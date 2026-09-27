@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { Button, Chip, Drawer } from '@heroui/react';
 import { X, ChartCandlestick, PlusCircle } from 'lucide-react';
 import { get } from '../api';
-import { Stat, Empty, Loading, Notice, PriceRange, TxHash } from './ui';
+import { Stat, Empty, Fig, Loading, Notice, PriceRange, TxHash, TradeLinks, baseTokenOf } from './ui';
 import TokenIcon, { TokenPair } from './TokenIcon';
 import { usd, pct, tone, age, ago, num, short, qty, fmtQty, price, sqrtPrice, tickPrice, locale as fmtLocale } from '../fmt';
 import { useI18n, reason } from '../i18n';
@@ -151,17 +151,6 @@ function manualHash(p) {
   const bulat = (v) => Math.round(v * 100) / 100;
   return `${ref}?lo=${bulat(lo)}&up=${bulat(up)}`;
 }
-
-const Fig = ({ label, value, sub, cls = '' }) => {
-  const { t } = useI18n();
-  return (
-    <div className="min-w-0">
-      <div className="truncate text-xs text-muted">{t(label)}</div>
-      <div className={`num truncate text-sm font-semibold ${cls}`}>{value}</div>
-      {sub && <div className="truncate text-xs text-muted">{sub}</div>}
-    </div>
-  );
-};
 
 function Salinan({ q, p }) {
   const { t } = useI18n();
@@ -324,6 +313,7 @@ export default function WalletPositionHistory({ p, address, onClose }) {
                       <span className="mono">#{p.token_id}</span><span>·</span>
                       <a href={'#wallet/' + address} className="mono hover:underline">{short(address)}</a>
                     </div>
+                    <TradeLinks token={baseTokenOf(p)} pool={p.pool_ref} className="mt-1.5 flex-wrap" />
                   </div>
                 </div>
               ) : <Drawer.Heading className="text-base font-semibold">{t('Riwayat posisi')}</Drawer.Heading>}

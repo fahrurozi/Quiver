@@ -1160,6 +1160,35 @@ const EN = {
   'ambil dari otomasi': 'take back from automation',
   'titip ke otomasi': 'hand over to automation',
 
+  // sisi target atas posisi kita (laci posisi bot)
+  'Posisi yang kita tiru': 'The position we mirror',
+  'Tidak meniru siapa pun': 'Mirrors nobody',
+  'Dia masih di dalam': 'They are still in',
+  'Dia sudah keluar': 'They are out',
+  'Modal dia': 'Their capital',
+  'Dia tarik': 'They withdrew',
+  'Dia taruh': 'They put in',
+  'Nilai dia': 'Their value',
+  'Dia dapat': 'They got out',
+  '+{n} klaim fee': '+{n} fee claims',
+  'Hasil dia': 'Their result',
+  'Hasil dia (sementara)': 'Their result (so far)',
+  'Hasil posisi aslinya belum diketahui: wallet target ini belum diriset, dan pemantau belum mencatat satu aksi pun di posisi itu.':
+    'How the original position is doing is unknown: this target wallet has not been researched, and the watcher recorded no action at all on that position.',
+  'Dari riset wallet: pokok, fee, dan token sisa yang dia jual sudah ikut terhitung.':
+    'From the wallet research: principal, fees and the leftover tokens they sold are all counted.',
+  'Dari riset wallet — fee dan token sisa yang dia jual sudah ikut. Posisinya masih terbuka, jadi nilainya sebesar pemindaian wallet terakhir, bukan harga sekarang.':
+    'From the wallet research — fees and the leftover tokens they sold are counted. Their position is still open, so the value is as of the last wallet scan, not the current price.',
+  'Belum ada riset wallet, jadi ini dari aksi yang terpantau saja: pokok yang dia tarik dikurangi yang dia taruh. Fee yang dia panen terpisah tidak ikut, jadi angka ini lantai — bukan laba pastinya.':
+    'No wallet research yet, so this comes from the watched actions alone: the principal they withdrew minus what they put in. Fees they harvested separately are not included, so this is a floor — not their certain profit.',
+  'Dia belum menarik apa pun dari posisi itu, jadi hasilnya belum bisa dihitung.':
+    'They have withdrawn nothing from that position yet, so their result cannot be computed.',
+  'Pindai wallet target': 'Scan the target wallet',
+  'untuk angka yang lengkap.': 'for the complete numbers.',
+  'dia pegang {d}': 'they held {d}',
+  'dia buka {w}': 'they opened it {w}',
+  '{n} aksi terpantau': '{n} watched actions',
+
   // ---- profil gaya LP (dulu halaman Scout, sekarang di dalam Wallet) ----
   'Gaya LP · dari {n} posisi berjalan': 'LP style · from {n} open positions',
   'Sedang in-range': 'Currently in range',

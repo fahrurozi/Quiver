@@ -45,6 +45,20 @@ export function Stat({ label, value, sub, fx = null, valueClass = '', badge = nu
   );
 }
 
+// Angka kecil di dalam panel: label, nilai, keterangan — tiga baris rapat, tanpa
+// kartu sendiri. Dipakai berpasangan di dalam laci posisi, tempat angka kita dan
+// angka target berdiri berdampingan; ubin `Stat` di sana akan bersaing dengan
+// angka utama di kepala laci.
+export function Fig({ label, value, sub, cls = '' }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-xs text-muted">{t(label)}</div>
+      <div className={`num truncate text-sm font-semibold ${cls}`}>{value}</div>
+      {sub && <div className="truncate text-xs text-muted">{sub}</div>}
+    </div>
+  );
+}
+
 // Pita angka utama. Empat ubin seukuran sama membuat "total portofolio" dan
 // "win rate" tampak sama pentingnya; padahal dua angka pertama yang dicari mata
 // setiap kali halaman dibuka. Keduanya dinaikkan ke kartu selebar halaman dengan

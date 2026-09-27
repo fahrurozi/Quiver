@@ -24,6 +24,7 @@ import { useClosePosition } from '../useClosePosition';
 import { useClaimFees } from '../useClaimFees';
 import AutoCompoundButton from '../components/AutoCompoundButton';
 import TakeoverButton from '../components/TakeoverButton';
+import TargetSide from '../components/TargetSide';
 import ShareButton, { positionCard } from '../components/ShareCard';
 import { Panel, Stat, KV, Dot, Empty, Loading, Notice, Segmented, PriceRange, Refresh, ask, TradeLinks, DataLinks } from '../components/ui';
 import { TokenPair, TokenSym, PairName } from '../components/TokenIcon';
@@ -586,6 +587,9 @@ export default function PositionDetail({ id }) {
         </Panel>
 
         <div className="grid gap-3">
+          {/* Angka orang yang ditiru, di atas angka posisi ini — pertanyaan yang sama
+              dijawab di tempat yang sama seperti di laci riwayat. */}
+          <TargetSide p={p} className="" />
           <Panel title="Posisi ini" bodyClass="px-4 py-1">
             <div className="divide-y divide-border">
               <KV label="Rentang">

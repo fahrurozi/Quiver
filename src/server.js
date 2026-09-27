@@ -1158,6 +1158,10 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
 
       const costUsd = (row.cost_quote || 0) * k;
       const outUsd = row.status === 'closed' ? (row.out_quote || 0) * k : null;
+      // Sisi target: posisi asli yang ditiru dan bagaimana DIA berakhir di sana.
+      // Laci ini dulu hanya bercerita tentang kita; "kita rugi $41, yang ditiru
+      // bagaimana?" harus dijawab di halaman lain.
+      const origin = originOf(row, { watch: true });
       // Posisi terbuka: PnL-nya dari sinkron live (angka yang sama dengan tabel),
       // beserta pecahannya — nilai LP vs modal, IL vs sekadar memegang token, fee —
       // supaya laci bisa menjelaskan KENAPA minus/plus, bukan cuma angkanya.
@@ -1174,7 +1178,8 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
           symbol0: toks.get(row.token0)?.symbol || '?', symbol1: toks.get(row.token1)?.symbol || '?',
           dec0: toks.get(row.token0)?.decimals ?? 18, dec1: toks.get(row.token1)?.decimals ?? 18,
           opened_ts: row.opened_ts, closed_ts: row.closed_ts, target: row.target, mirror_of: row.mirror_of,
-          targetLabel: row.target ? (store.get('SELECT label FROM targets WHERE chain=? AND address=?', chain.network, row.target)?.label || null) : null,
+          takeover_ts: row.takeover_ts ?? null,
+          origin, targetLabel: origin.targetLabel,
           cost: costOf(id, costUsd),
           closeUsd: events.find((e) => e.hash === row.tx_close)?.valueUsd ?? null,
           swapDeltaUsd: events.some((e) => e.saleDeltaUsd != null) ? events.reduce((sum, e) => sum + (e.saleDeltaUsd || 0), 0) : null,
