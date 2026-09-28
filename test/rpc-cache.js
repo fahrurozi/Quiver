@@ -217,6 +217,25 @@ const receipt = (block) => ({ blockNumber: hex(block), status: '0x1', logs: [] }
     assert.strictEqual(p.cacheStats().tooBig, 2);
   });
 
+  await t('blok yang masih segar tidak ditanyakan ke database sama sekali', async () => {
+    // Mesin membaca fee di blok head-3 tiap tick: pencarian seperti itu tidak boleh
+    // menambah beban database, dan tidak boleh dihitung sebagai "meleset".
+    const p = pool((m, prm) => ({ number: prm[0] }));
+    let baca = 0;
+    const asli = p.cache.store.get.bind(p.cache.store);
+    p.cache.store.get = (...a) => { if (String(a[0]).includes('rpc_cache')) baca++; return asli(...a); };
+    for (let i = 0; i < 5; i++) await p.call('eth_getBlockByNumber', [hex(HEAD - 3), false]);
+    assert.strictEqual(baca, 0, `database ditanya ${baca} kali untuk blok yang belum pasti`);
+    assert.strictEqual(p.cacheStats().misses, 0);
+    assert.strictEqual(p.cacheStats().hitPct, 0);
+    // Blok yang dalam tetap dihitung: sekali meleset, sisanya kena.
+    for (let i = 0; i < 3; i++) await p.call('eth_getBlockByNumber', [hex(HEAD - 5000), false]);
+    const st = p.cacheStats();
+    assert.strictEqual(st.misses, 1);
+    assert.strictEqual(st.hits, 2);
+    assert.strictEqual(st.hitPct, 67);
+  });
+
   await t('jawaban dari cache tidak berbagi objek: pemanggil boleh mengubahnya', async () => {
     const p = pool(() => receipt(HEAD - 5000));
     const a = await p.call('eth_getTransactionReceipt', ['0x04']);

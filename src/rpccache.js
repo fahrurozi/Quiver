@@ -112,14 +112,23 @@ class RpcCache {
     return pin ? { ...pin, method, key: keyOf(method, params) } : null;
   }
 
+  // Blok yang belum cukup dalam tidak akan pernah ada di sini (put menolaknya), jadi
+  // tidak usah ditanyakan ke database sama sekali: mesin membaca fee di blok head-3
+  // tiap tick untuk tiap posisi, dan itu kueri percuma yang berulang selamanya. Juga
+  // menjaga angka "berapa persen dijawab tanpa jaringan" tetap bermakna — yang dihitung
+  // cuma pembacaan yang MEMANG bisa disimpan.
+  tooFresh(plan, head) {
+    return plan.block != null && plan.block > 0 && (!head || plan.block > head - this.conf);
+  }
+
   // undefined = tidak ada di cache (nilai `null` sendiri tidak pernah disimpan).
   //
   // Yang disimpan di memori adalah TEKS JSON-nya, bukan objeknya: tiap pemanggil
   // menerima objek barunya sendiri. Pemanggil yang mengubah jawaban di tempat (ethers
   // suka menormalkan receipt) kalau tidak begini akan ikut mengubah isi cache untuk
   // semua pemanggil berikutnya — dan itu bug yang sangat sukar dilacak.
-  get(plan) {
-    if (!plan) return undefined;
+  get(plan, head) {
+    if (!plan || this.tooFresh(plan, head)) return undefined;
     const hit = this.mem.get(plan.key);
     if (hit !== undefined) { this.hits++; return JSON.parse(hit.json); }
     let row;

@@ -298,7 +298,7 @@ class RpcPool {
     const out = new Array(calls.length).fill(null);
     const ask = [];
     for (let i = 0; i < calls.length; i++) {
-      const hit = plans[i] ? this.cache.get(plans[i]) : undefined;
+      const hit = plans[i] ? this.cache.get(plans[i], this.head) : undefined;
       if (hit !== undefined) out[i] = { result: hit, cached: true };
       else ask.push(i);
     }
@@ -481,7 +481,7 @@ class RpcPool {
     // cache SEBELUM antre — kalau tidak, pemindaian ulang tetap membayar jeda antar
     // getLogs (logs_gap_ms) untuk data yang sudah ada di tangan.
     const plan = this.cache ? this.cache.plan('eth_getLogs', [filter]) : null;
-    const hit = plan ? this.cache.get(plan) : undefined;
+    const hit = plan ? this.cache.get(plan, this.head) : undefined;
     if (hit !== undefined) return hit;
     await this.logsSlot(priority);
     let out;
