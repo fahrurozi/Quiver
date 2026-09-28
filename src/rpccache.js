@@ -103,6 +103,10 @@ class RpcCache {
     this.memBytes = 0;
     this.mem = new Map();
     this.hits = 0; this.misses = 0; this.writes = 0; this.tooBig = 0;
+    // Per metode: kena / meleset / tak jadi disimpan. Tanpa ini, "cache-nya jalan tidak?"
+    // cuma bisa dijawab dengan tebakan — angka gabungan tidak memberi tahu metode mana
+    // yang terus meleset (mis. receipt yang jawabannya null dan ditanya lagi tiap sinkron).
+    this.by = {};
     try { this.sweep(); } catch (e) { this.log(`cache rpc: bersih-bersih awal gagal (${e.message})`); }
   }
 
@@ -121,6 +125,11 @@ class RpcCache {
     return plan.block != null && plan.block > 0 && (!head || plan.block > head - this.conf);
   }
 
+  tally(method, field) {
+    const b = this.by[method] || (this.by[method] = { hit: 0, miss: 0, skip: 0 });
+    b[field]++;
+  }
+
   // undefined = tidak ada di cache (nilai `null` sendiri tidak pernah disimpan).
   //
   // Yang disimpan di memori adalah TEKS JSON-nya, bukan objeknya: tiap pemanggil
@@ -130,15 +139,15 @@ class RpcCache {
   get(plan, head) {
     if (!plan || this.tooFresh(plan, head)) return undefined;
     const hit = this.mem.get(plan.key);
-    if (hit !== undefined) { this.hits++; return JSON.parse(hit.json); }
+    if (hit !== undefined) { this.hits++; this.tally(plan.method, 'hit'); return JSON.parse(hit.json); }
     let row;
     try { row = this.store.get('SELECT res FROM rpc_cache WHERE chain=? AND k=?', this.chain, plan.key); }
     catch (e) { this.log(`cache rpc: baca gagal (${e.message})`); return undefined; }
-    if (!row) { this.misses++; return undefined; }
+    if (!row) { this.misses++; this.tally(plan.method, 'miss'); return undefined; }
     let val;
     try { val = JSON.parse(row.res); } catch { return undefined; }
     this.remember(plan.key, row.res, Buffer.byteLength(row.res));
-    this.hits++;
+    this.hits++; this.tally(plan.method, 'hit');
     return val;
   }
 
@@ -161,8 +170,11 @@ class RpcCache {
   put(plan, result, head) {
     if (!plan || result == null) return false;
     const block = plan.block != null ? plan.block : plan.blockOf(result);
-    if (block == null) return false;                       // mis. receipt yang masih pending
-    if (block > 0 && (!head || block > head - this.conf)) return false;   // belum cukup dalam
+    // Tidak jadi disimpan: receipt yang masih pending (blok belum ada), atau blok yang
+    // belum cukup dalam. Dicatat per metode — kalau `skip` terus naik sementara `miss`
+    // ikut naik, panggilan itu memang tidak akan pernah bisa di-cache.
+    if (block == null) { this.tally(plan.method, 'skip'); return false; }
+    if (block > 0 && (!head || block > head - this.conf)) { this.tally(plan.method, 'skip'); return false; }
     let res;
     try { res = JSON.stringify(result); } catch { return false; }
     const bytes = Buffer.byteLength(res);
@@ -207,7 +219,7 @@ class RpcCache {
     const asked = this.hits + this.misses;
     return {
       rows: n, bytes, mem: this.mem.size, memBytes: this.memBytes,
-      hits: this.hits, misses: this.misses, writes: this.writes, tooBig: this.tooBig,
+      hits: this.hits, misses: this.misses, writes: this.writes, tooBig: this.tooBig, by: this.by,
       hitPct: asked ? Math.round((this.hits / asked) * 100) : 0,
       confirmations: this.conf,
     };
