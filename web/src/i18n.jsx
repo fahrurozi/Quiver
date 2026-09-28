@@ -1278,6 +1278,11 @@ const EN = {
   'Endpoint RPC': 'RPC endpoints',
   'Urutan = prioritas: yang teratas dipakai lebih dulu, yang di bawahnya cadangan saat ia gagal atau istirahat (429). getLogs hanya ke endpoint yang sanggup, pembacaan state lampau hanya ke endpoint arsip. Perubahan berlaku tanpa restart.':
     'Order = priority: the top endpoint is used first; the ones below are fallbacks when it fails or is cooling down (429). getLogs only goes to endpoints that support it, historical state reads only to archive endpoints. Changes take effect without a restart.',
+  'Cache jawaban pasti': 'Settled-answer cache',
+  'Cache jawaban pasti: {n} tersimpan · {mb} MB · {p}% pembacaan dijawab tanpa menyentuh jaringan':
+    'Settled-answer cache: {n} stored · {mb} MB · {p}% of reads answered without touching the network',
+  'Panggilan yang terikat pada blok lampau — receipt transaksi, header blok, saldo dan eth_call di blok tertentu, getLogs untuk rentang yang sudah lewat — jawabannya tidak mungkin berubah lagi, jadi disimpan di database dan dipakai ulang. Data hidup (harga pool, saldo terkini, tinggi blok) tidak pernah disimpan. Satu blok dianggap pasti setelah tertinggal {n} blok dari kepala rantai. Simpanan lama dibuang sendiri; kehilangannya paling banter berarti satu panggilan RPC lagi.':
+    'Calls pinned to a past block — transaction receipts, block headers, balances and eth_call at a given block, getLogs over a range that has already passed — can no longer answer differently, so they are stored in the database and reused. Live data (pool prices, current balances, block height) is never stored. A block counts as settled once it is {n} blocks behind the chain head. Old entries are discarded on their own; losing one costs at most one more RPC call.',
   'Naikkan prioritas': 'Move up',
   'Turunkan prioritas': 'Move down',
   'Prioritas utama': 'Primary',

@@ -59,7 +59,14 @@
           }
         ],
         "max_inflight": 4,
-        "dns_over_https": true
+        "dns_over_https": true,
+        "cache": {
+          "confirmations": 64,
+          "ttl_days": 30,
+          "max_rows": 100000,
+          "max_mb": 200,
+          "catatan": "cache jawaban RPC yang terikat blok lampau (src/rpccache.js); enabled:false mematikannya"
+        }
       },
       "targets": [],
       "rules": {

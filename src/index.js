@@ -95,6 +95,9 @@ async function main() {
     const rpc = new RpcPool(view.chain.endpoints, clog, {
       max_inflight: view.chain.max_inflight || 3,
       dns_over_https: view.chain.dns_over_https !== false,
+      // Jawaban yang sudah pasti (blok lampau) disimpan di database yang sama —
+      // batas & kedalaman bisa diatur lewat chains.<nama>.chain.cache.
+      cache: { ...(view.chain.cache || {}), store, chain: key },
     });
     const chain = new Chain(rpc, store, clog, key);
     nets[key] = { key, label: chain.label, cfg: view, rpc, chain, log: clog };
@@ -284,7 +287,13 @@ async function main() {
       setInterval(when(() => engine.retryLeftovers(), 'jual sisa'), 1000),
     );
   }));
-  timers.push(setInterval(() => store.prune(30), 3600_000));
+  timers.push(setInterval(() => {
+    store.prune(30);
+    // Cache RPC: buang yang kedaluwarsa dan yang melewati batas ukuran.
+    for (const net of Object.values(nets)) {
+      try { net.rpc.cache?.sweep(); } catch (e) { net.log(`cache rpc: ${e.message}`); }
+    }
+  }, 3600_000));
 }
 
 main().catch((e) => { console.error('fatal:', e); process.exit(1); });

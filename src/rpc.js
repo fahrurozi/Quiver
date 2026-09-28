@@ -10,6 +10,7 @@
 //     kalau panggilan berat datang beruntun — jadi ada antrean inflight + failover.
 const https = require('node:https');
 const { URL } = require('node:url');
+const { RpcCache } = require('./rpccache');
 
 const DOH = 'https://1.1.1.1/dns-query';
 
@@ -43,7 +44,17 @@ class RpcPool {
     // Kelonggaran batas KERAS di atas timeout socket (lihat post): cukup untuk balasan
     // yang sedang mengalir pelan, tidak cukup untuk menggantung selamanya.
     this.hardMarginMs = opts.hard_margin_ms ?? 5000;
+    // Tinggi rantai terakhir yang terlihat dari balasan endpoint mana pun. Dipakai
+    // cache untuk memutuskan satu blok sudah cukup dalam untuk disimpan; tidak pernah
+    // dipakai untuk memutuskan sampai blok mana yang dipindai (itu safeHead).
+    this.head = 0;
+    // Cache jawaban yang sudah pasti (src/rpccache.js). Tanpa `store` — mis. kolam
+    // sementara untuk menguji endpoint di halaman Pengaturan — tidak ada cache.
+    const c = opts.cache;
+    this.cache = c && c.store && c.enabled !== false ? new RpcCache({ log, ...c }) : null;
   }
+
+  noteHead(n) { if (Number.isFinite(n) && n > this.head) this.head = n; }
 
   async logsSlot(priority = false) {
     if (this.logsActive < this.logsMax && !this.logsQueue.length) { this.logsActive++; }
@@ -249,6 +260,7 @@ class RpcPool {
     const [r] = await this.batch([{ method: 'eth_blockNumber' }]);
     const h = r && !r.error && r.result ? parseInt(r.result, 16) : null;
     if (!h) throw new Error('tidak ada endpoint yang membalas blockNumber');
+    this.noteHead(h);
     // Endpoint getLogs publik biasanya 3–5 blok di belakang endpoint tercepat. Tanpa
     // jarak ini ujung rentang sering belum ada di sana dan pemindaian gagal beruntun.
     const safe = h - this.headMargin;
@@ -273,7 +285,33 @@ class RpcPool {
   // calls: [{method, params}] -> hasil sejajar; melempar kalau semua endpoint gagal
   // `used` (opsional): objek yang diisi {ep} — endpoint yang terakhir melayani, supaya
   // pemanggil bisa mengistirahatkannya kalau balasan 200-nya ternyata berisi galat.
+  // Panggilan yang jawabannya sudah tersimpan dijawab dari cache; sisanya saja yang
+  // pergi ke jaringan. `nocache: true` pada satu panggilan melewati cache sepenuhnya
+  // (dipakai _getLogs untuk blok ujung rentang: yang diuji di sana justru apakah
+  // ENDPOINT-nya sudah punya blok itu, jadi jawaban simpanan tidak menjawab apa pun).
+  // eth_getLogs juga tidak disimpan di sini melainkan di getLogs(), setelah
+  // pemeriksaan "node tertinggal" lewat — daftar log kosong dari node yang tertinggal
+  // tidak boleh diabadikan.
   async batch(calls, opts = {}) {
+    if (!this.cache) return this.batchLive(calls, opts);
+    const plans = calls.map((c) => (c.nocache || c.method === 'eth_getLogs' ? null : this.cache.plan(c.method, c.params)));
+    const out = new Array(calls.length).fill(null);
+    const ask = [];
+    for (let i = 0; i < calls.length; i++) {
+      const hit = plans[i] ? this.cache.get(plans[i]) : undefined;
+      if (hit !== undefined) out[i] = { result: hit, cached: true };
+      else ask.push(i);
+    }
+    if (!ask.length) return out;
+    const res = await this.batchLive(ask.map((i) => calls[i]), opts);
+    ask.forEach((i, k) => {
+      out[i] = res[k];
+      if (plans[i] && res[k] && !res[k].error && !res[k].transient) this.cache.put(plans[i], res[k].result, this.head);
+    });
+    return out;
+  }
+
+  async batchLive(calls, opts = {}) {
     const out = await this.batchOnce(calls, opts);
     // getLogs punya failover sendiri (_getLogs: istirahat khusus getLogs per endpoint).
     if (calls.some((c) => c.method === 'eth_getLogs')) return out;
@@ -325,7 +363,14 @@ class RpcPool {
             const tr = RpcPool.transientItemError(r.error);
             out[pos + i] = tr ? { error: r.error, transient: true } : { error: r.error };
             if (tr) flaky++;
-          } else out[pos + i] = { result: r.result ?? null };
+          } else {
+            out[pos + i] = { result: r.result ?? null };
+            // Tinggi rantai ikut terbaca dari lalu lintas biasa — tidak ada panggilan
+            // tambahan hanya untuk tahu seberapa dalam satu blok sudah tertanam.
+            const c = slice[i];
+            if (c.method === 'eth_blockNumber') this.noteHead(parseInt(r.result, 16));
+            else if (c.method === 'eth_getBlockByNumber' && !/^0x/.test(String(c.params?.[0] ?? ''))) this.noteHead(parseInt(r.result?.number, 16));
+          }
         }
         ep.calls += slice.length; ep.lastMs = Date.now() - t0;
         if (flaky && !needsLogs) {
@@ -432,8 +477,17 @@ class RpcPool {
   // mengistirahatkan jatah getLogs endpoint itu (eth_call-nya tetap dipakai) dan
   // mencoba cadangan berikutnya; menyerah hanya kalau semua sudah dicoba.
   async getLogs(filter, { priority = false } = {}) {
+    // Rentang yang sudah pernah dibaca dan kedua ujungnya sudah lewat: dijawab dari
+    // cache SEBELUM antre — kalau tidak, pemindaian ulang tetap membayar jeda antar
+    // getLogs (logs_gap_ms) untuk data yang sudah ada di tangan.
+    const plan = this.cache ? this.cache.plan('eth_getLogs', [filter]) : null;
+    const hit = plan ? this.cache.get(plan) : undefined;
+    if (hit !== undefined) return hit;
     await this.logsSlot(priority);
-    try { return await this._getLogs(filter); } finally { this.logsRelease(); }
+    let out;
+    try { out = await this._getLogs(filter); } finally { this.logsRelease(); }
+    if (plan) this.cache.put(plan, out, this.head);
+    return out;
   }
 
   async _getLogs(filter) {
@@ -451,7 +505,7 @@ class RpcPool {
       const used = {};
       try {
         const calls = [{ method: 'eth_getLogs', params: [filter] }];
-        if (toTag) calls.push({ method: 'eth_getBlockByNumber', params: [toTag, false] });
+        if (toTag) calls.push({ method: 'eth_getBlockByNumber', params: [toTag, false], nocache: true });
         const res = await this.batch(calls, { timeoutMs: 45_000, logSpan: span, used });
         const [lr, br] = res;
         if (!lr) throw new Error('eth_getLogs: tidak ada balasan');
@@ -525,6 +579,9 @@ class RpcPool {
     }
     return res.map((r) => (r && !r.error ? r.result : null));
   }
+
+  // Ringkasan cache (null = tidak ada cache di kolam ini) — dipakai halaman Pengaturan.
+  cacheStats() { return this.cache ? this.cache.stats() : null; }
 
   stats() {
     return this.eps.map((e) => ({

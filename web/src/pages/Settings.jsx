@@ -320,6 +320,24 @@ function RpcRow({ e, rank, total, onSave, onDelete, onMove }) {
   );
 }
 
+// Jawaban yang tidak bisa berubah lagi (blok lampau) disimpan di database dan dipakai
+// ulang tanpa menyentuh jaringan — lihat src/rpccache.js. Barisnya cuma laporan: tidak
+// ada yang perlu disetel, dan cache yang kosong pun tidak salah.
+function RpcCache({ c }) {
+  const { t } = useI18n();
+  if (!c) return null;
+  const mb = c.bytes / 1048576;
+  return (
+    <div className="flex items-center gap-1 text-sm text-muted">
+      <span>{t('Cache jawaban pasti: {n} tersimpan · {mb} MB · {p}% pembacaan dijawab tanpa menyentuh jaringan',
+        { n: num(c.rows), mb: mb.toLocaleString(fmtLocale(), { maximumFractionDigits: mb < 10 ? 1 : 0 }), p: c.hitPct })}</span>
+      <SettingInfo title="Cache jawaban pasti">
+        <span>{t('Panggilan yang terikat pada blok lampau — receipt transaksi, header blok, saldo dan eth_call di blok tertentu, getLogs untuk rentang yang sudah lewat — jawabannya tidak mungkin berubah lagi, jadi disimpan di database dan dipakai ulang. Data hidup (harga pool, saldo terkini, tinggi blok) tidak pernah disimpan. Satu blok dianggap pasti setelah tertinggal {n} blok dari kepala rantai. Simpanan lama dibuang sendiri; kehilangannya paling banter berarti satu panggilan RPC lagi.', { n: c.confirmations })}</span>
+      </SettingInfo>
+    </div>
+  );
+}
+
 function RpcTab({ d, setD }) {
   const { t } = useI18n();
   const [url, setUrl] = useState('');
@@ -366,6 +384,8 @@ function RpcTab({ d, setD }) {
             onDelete={async (id) => { if (await ask({ title: t('Hapus endpoint ini?'), confirm: t('Hapus'), danger: true })) saveList(current().filter((x) => x.id !== id), 'Endpoint dihapus'); }} />
         ))}
       </div>
+
+      <RpcCache c={d.rpcCache} />
 
       <Separator />
       <div className="font-medium">{t('Tambah endpoint')}</div>

@@ -249,6 +249,9 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
           status: { ...engine.drawdownStatus(), equityUsd: await equityNow() },
         },
         rpc: rpcView(),
+        // Cache jawaban RPC yang sudah pasti — ditampilkan di bawah daftar endpoint
+        // supaya terlihat berapa panggilan yang tidak perlu dikirim sama sekali.
+        rpcCache: rpc.cacheStats ? rpc.cacheStats() : null,
         gas: {
           price_multiplier: cfg.gas?.price_multiplier ?? 1.5,
           priority_gwei: (cfg.gas?.priority_wei ?? 10_000_000) / 1e9,

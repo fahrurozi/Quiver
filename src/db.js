@@ -273,6 +273,22 @@ CREATE TABLE IF NOT EXISTS wprices (
   PRIMARY KEY (chain, pool_ref, block)
 );
 
+-- Jawaban RPC yang tidak bisa berubah lagi: panggilan yang terikat pada satu blok
+-- lampau (receipt, header blok, saldo/eth_call/getLogs di blok yang sudah dalam).
+-- Isinya boleh hilang kapan saja — paling banter satu panggilan RPC lagi. Aturan
+-- apa yang boleh masuk dan kapan dibuang: src/rpccache.js.
+CREATE TABLE IF NOT EXISTS rpc_cache (
+  chain   TEXT NOT NULL,
+  k       TEXT NOT NULL,
+  method  TEXT NOT NULL,
+  block   INTEGER,
+  res     TEXT NOT NULL,
+  bytes   INTEGER NOT NULL,
+  ts      INTEGER NOT NULL,
+  PRIMARY KEY (chain, k)
+);
+CREATE INDEX IF NOT EXISTS idx_rpccache_ts ON rpc_cache(ts);
+
 CREATE TABLE IF NOT EXISTS state (k TEXT PRIMARY KEY, v TEXT);
 
 CREATE TABLE IF NOT EXISTS logs (

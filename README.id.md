@@ -433,6 +433,40 @@ bisa berbeda 10–20 blok; kalau kursor dimajukan ke kepala endpoint tercepat se
 `getLogs` dilayani endpoint yang tertinggal, blok di antaranya hilang selamanya karena
 kursor sudah terlanjur lewat.
 
+### Cache jawaban yang sudah pasti
+
+Sebagian besar beban RPC bukan data hidup, melainkan data mati yang dibaca berulang:
+receipt transaksi yang sama dibaca lagi tiap sinkron, header blok lampau dibaca lagi
+tiap riwayat dihitung ulang, saldo di blok lampau dibaca lagi tiap pelacak modal
+membelah rentang, dan `getLogs` untuk rentang blok yang sama diminta lagi tiap wallet
+dipindai ulang. Jawabannya tidak mungkin berbeda — blok yang sudah lewat tidak berubah
+— tapi tiap pembacaan tetap memakan jatah endpoint.
+
+`src/rpccache.js` menyimpan jawaban panggilan yang **terikat pada satu blok lampau**:
+`eth_getTransactionReceipt`, `eth_getTransactionByHash`, `eth_getBlockByNumber` /
+`ByHash`, `eth_getBalance`, `eth_getCode`, `eth_getStorageAt`, `eth_call` dan
+`eth_getLogs` dengan blok/rentang berupa angka, plus `eth_chainId`. Simpanannya di
+tabel `rpc_cache` pada database yang sama (bertahan lintas restart dan deploy) dengan
+satu lapis Map di memori di depannya. Kuncinya memuat chain, jadi satu database yang
+dipakai Robinhood dan BSC tidak tertukar.
+
+Yang **tidak pernah** disimpan: `eth_blockNumber`, gas, dan apa pun di `latest` /
+`pending` — itu justru data yang harus selalu baru. Satu blok baru dianggap pasti
+setelah tertinggal `confirmations` blok (bawaan 64) dari kepala rantai yang terakhir
+terlihat; selama tinggi rantai belum diketahui, tidak ada yang disimpan. Galat, hasil
+`null` (receipt yang masih pending), dan jawaban raksasa juga dilewati.
+
+Satu jebakan yang sengaja dihindari: `_getLogs` memeriksa "node tertinggal" dengan
+meminta blok ujung rentang di batch yang sama. Pemeriksaan itu menguji ENDPOINT-nya,
+jadi panggilan itu ditandai `nocache` dan daftar log baru disimpan setelah
+pemeriksaannya lewat — daftar kosong dari node yang tertinggal tidak boleh diabadikan.
+
+Batas dan kedalaman bisa disetel di `chains.<nama>.chain.cache`
+(`enabled`, `confirmations`, `ttl_days`, `max_rows`, `max_mb`, `max_entry_kb`);
+entri kedaluwarsa dan kelebihan batas dibuang tiap jam. Hasilnya terlihat di
+**Pengaturan → RPC** (berapa tersimpan, berapa MB, berapa persen pembacaan yang tidak
+menyentuh jaringan). Uji: `node test/rpc-cache.js`.
+
 ## Catatan teknis yang mahal ditemukan
 
 - **DNS `rpc.mainnet.chain.robinhood.com` dibajak ISP** (Telkomsel) ke portal
