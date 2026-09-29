@@ -202,7 +202,7 @@ The dashboard shows one chain at a time; the switcher under the logo (or `?chain
 
 Position, pool and token detail pages open from the tables and from the global search. Language preferences are stored per browser; Telegram language preferences are stored per chat.
 
-**Settings → Display** adds a second currency beside every dollar figure on the dashboard (`$1,983.22  ≈ Rp 35.4M`). Dollars remain the primary unit: pools, token prices, copy budgets and every PnL calculation stay in USD, and the second currency is display-only annotation, written small and grey. The server fetches the rate from open exchange-rate sources (open.er-api.com, falling back to frankfurter.app), refreshes it every six hours, caches the last good rate across restarts, and serves it to the dashboard with the regular status poll. Choosing *None* removes the annotation entirely.
+**Settings → Display** adds a second currency beside every dollar figure on the dashboard (`$1,983.22  ≈ Rp 35.4M`). Dollars remain the primary unit: pools, token prices, copy budgets and every PnL calculation stay in USD, and the second currency is display-only annotation, written small and grey. The server fetches the rate from open exchange-rate sources (open.er-api.com, falling back to frankfurter.app), refreshes it every six hours, caches the last good rate across restarts, and serves it to the dashboard with the regular status poll. Choosing *None* removes the annotation entirely. The Telegram cards use the same rate: the portfolio total on the home card and on **Summary** carries the same annotation (`💰 Portfolio $2,143.42 · ≈ Rp 34.9M`).
 
 To connect Telegram:
 

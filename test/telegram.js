@@ -438,6 +438,38 @@ const buttons = (o) => (o?.params?.reply_markup?.inline_keyboard || []).flat().m
     w.bot.stop();
   });
 
+  await t('kartu utama menulis nilai portofolio dalam mata uang kedua', async () => {
+    const w = build();
+    const asli = w.bot.api.bind(w.bot);
+    // Kursnya datang dari /api/overview (src/fx.js), sama seperti di dasbor — di sini
+    // disuntik supaya uji tidak menyentuh jaringan.
+    const pakai = (fx) => {
+      w.bot.api = async (m, path, b, q) => {
+        if (path === '/api/overview') return { ...(await asli(m, path, b, q)), fx };
+        if (path === '/api/portfolio') {
+          return { range: '24h', baseline: null, series: [], now: { value: 2143.42, cash: { usd: 1568.74 }, netPnl: 390.07 }, stats: {}, daily: {}, byTarget: [], closed: [] };
+        }
+        return asli(m, path, b, q);
+      };
+    };
+
+    pakai({ currency: 'IDR', rate: 16000, at: Date.now(), stale: false });
+    const [rupiah] = await w.bot.home();
+    assert.match(rupiah, /💰 Portofolio <b>\$2\.143,42<\/b> · ≈ Rp\s?34,3\s?jt/, rupiah);
+    const [ringkas] = await w.bot.overview();
+    assert.match(ringkas, /· ≈ Rp\s?34,3\s?jt/, ringkas);
+
+    // Mata uang kedua dimatikan di Pengaturan, atau kursnya belum pernah terbaca:
+    // barisnya kembali seperti semula, tanpa sisa pemisah "·" yang menggantung.
+    for (const fx of [null, { currency: 'IDR', rate: null }]) {
+      pakai(fx);
+      const [polos] = await w.bot.home();
+      assert.match(polos, /💰 Portofolio <b>\$2\.143,42<\/b>\n/, polos);
+    }
+    w.bot.api = asli;
+    w.bot.stop();
+  });
+
   await t('bahasa Telegram tersimpan per chat dan tidak bocor antar permintaan', async () => {
     const w = build({ chats: [CHAT, '777'] });
     await w.bot.handle(msg('/language'));

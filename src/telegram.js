@@ -33,6 +33,9 @@ const CHART_TFS = ['5m', '15m', '1h', '4h', '1d'];
 const CHART_SPANS = [[0, 'auto'], [24, '1 hari'], [72, '3 hari'], [168, '7 hari'], [720, '30 hari']];
 // Ukuran & tema kartu bagikan: daftar dan labelnya dari penggambarnya sendiri.
 const { SIZES: CARD_SIZES, THEMES: CARD_THEMES } = require('./share-card');
+// Mata uang kedua (Pengaturan → Tampilan): kursnya ikut di /api/overview, jadi kartu
+// di sini memakai angka yang sama dengan dasbor tanpa permintaan jaringan sendiri.
+const { fxFormat } = require('./fx');
 
 // Nama manusiawi untuk apa yang terjadi di chain. Tabel `actions.kind` dan
 // `txs.kind` menyimpan istilah mesin ('increase', 'zap_swap'); menampilkannya apa
@@ -64,6 +67,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const nf = (n, d = 2) => Number(n).toLocaleString(locale() === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
 const usd = (n, d = 2) => (n == null || !Number.isFinite(Number(n)) ? '—' : `$${nf(n, d)}`);
+// Keterangan kecil di samping angka dolar utama: nominal yang sama dalam mata uang
+// yang dipilih di Pengaturan ("$2.143,42 · ≈ Rp34,9 jt"). Dolar tetap angka utamanya
+// — itu satuan mesin dan semua perhitungan PnL; ini cuma rasa besaran buat yang
+// tidak berpikir dalam dolar. Kurs belum terbaca atau mata uang kedua dimatikan =
+// string kosong, jadi barisnya tetap seperti sebelumnya.
+const approx = (v, fx) => { const t = fxFormat(v, fx, locale()); return t ? ` · ≈ ${esc(t)}` : ''; };
+
 // Persen selalu bertanda, dan minusnya memakai tanda minus sungguhan (−) seperti
 // sgn(): dalam satu kartu "−$0,05" berdampingan dengan "-0,05%" terbaca seperti dua
 // angka dari sistem yang berbeda.
@@ -1897,7 +1907,7 @@ class Telegram {
         : tr("Mode LIVE: transaksi dikirim ke chain dan memakai dana wallet."),
       o.mode.paused ? tr("Penyalinan dijeda: posisi target baru tidak diikuti. Posisi yang sudah terbuka tetap dijaga — aturan keluar dan sinyal keluar target tetap berjalan.") : null,
       '',
-      pf?.now?.cash ? tr("💰 Portofolio <b>{0}</b>", [usd(pf.now.value)]) : null,
+      pf?.now?.cash ? tr("💰 Portofolio <b>{0}</b>", [usd(pf.now.value)]) + approx(pf.now.value, o.fx) : null,
       `${net != null ? tr("PnL bersih") : 'PnL'} <b>${pnlText(net ?? pnl)}</b>${d24 != null ? tr(" · 24 jam {0}", [sgn(d24)]) : ''}`,
       tr("💼 {0} posisi · {1}{2}", [s.openCount, usd(s.exposureUsd), s.openCount ? ` · ${tr("{0} dari {1} di dalam rentang", [s.inRange, s.openCount])}` : '']),
       // Dua angka yang selalu ditanyakan setelah PnL: berapa yang masih menganggur
@@ -1946,7 +1956,7 @@ class Telegram {
     ];
 
     // 1. Uang: angka terbesar di atas, tebal; rinciannya di tabel yang lurus.
-    if (now?.cash) L.push(tr("💰 Portofolio <b>{0}</b>", [usd(now.value)]));
+    if (now?.cash) L.push(tr("💰 Portofolio <b>{0}</b>", [usd(now.value)]) + approx(now.value, o.fx));
     L.push(`${net != null ? tr("PnL bersih") : 'PnL'} <b>${pnlText(utama)}</b>${pnlPct != null ? ` ${pct(pnlPct)}` : ''}${d24 != null ? tr(" · 24 jam {0}", [sgn(d24)]) : ''}`);
     L.push(angka([
       [tr("kas wallet"), now?.cash ? usd(now.cash.usd) : null],

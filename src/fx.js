@@ -110,10 +110,31 @@ class Fx {
   }
 }
 
+// Nilai dolar ditulis dalam mata uang kedua, atau null kalau tidak ada yang perlu
+// ditulis. Aturannya sama persis dengan dasbor (web/src/currency.js): di bawah
+// setengah sen tidak ada isinya, nominal jutaan dipersingkat ("Rp22,4 jt") karena
+// ini keterangan dan bukan kuitansi, dan mata uang "besar" (EUR, GBP) tetap dua
+// angka di belakang koma supaya $1,20 tidak jadi "€1".
+function fxFormat(v, fx, lang = 'id') {
+  if (!fx || !(fx.rate > 0) || v == null || !Number.isFinite(Number(v))) return null;
+  if (Math.abs(v) < 0.005) return null;
+  const n = v * fx.rate;
+  const abs = Math.abs(n);
+  // minimumFractionDigits wajib ikut diisi: bawaan gaya "currency" adalah 2, dan
+  // Intl melempar RangeError kalau minimum lebih besar daripada maksimum.
+  const o = { style: 'currency', currency: fx.currency, minimumFractionDigits: 0, maximumFractionDigits: 0 };
+  if (abs >= 1e6) { o.notation = 'compact'; o.maximumFractionDigits = 1; }
+  else if (abs < 100) { o.maximumFractionDigits = 2; }
+  let s;
+  try { s = new Intl.NumberFormat(lang === 'en' ? 'en-US' : 'id-ID', o).format(abs); }
+  catch { return null; }   // kode mata uang yang tidak dikenal
+  return (n < 0 ? '\u2212' : '') + s;
+}
+
 // Mata uang yang dipakai dasbor. Belum pernah diatur (config lama, pemasangan baru)
 // = Rupiah: bot ini dipakai dari Indonesia, dan keterangan kecil yang langsung ada
 // lebih berguna daripada fitur yang harus ditemukan dulu. Dimatikan dari Pengaturan
 // tersimpan sebagai null, dan null TIDAK dibaca sebagai "belum pernah diatur".
 const currencyOf = (cfg) => (cfg?.display && 'currency' in cfg.display ? cfg.display.currency || '' : 'IDR');
 
-module.exports = { Fx, CURRENCIES, CURRENCIES_EN, currencyOf };
+module.exports = { Fx, CURRENCIES, CURRENCIES_EN, currencyOf, fxFormat };
