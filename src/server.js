@@ -194,6 +194,19 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
   // Sisi mana dari pool yang merupakan aset kuotasi (0 atau 1); null kalau tidak dikenal.
   // Menentukan arah harga yang ditampilkan: selalu "harga token spekulatif dalam kuotasi".
   const quoteSideOf = (t0, t1) => (QUOTES[(t0 || '').toLowerCase()] ? 0 : QUOTES[(t1 || '').toLowerCase()] ? 1 : null);
+  // Simbol & desimal tiap token yang pernah terlihat, dari tabel `tokens`, DITAMBAH
+  // aset kuotasi chain. Native (0x0) bukan ERC-20: symbol()/decimals() tidak bisa
+  // dipanggil, jadi Chain#tokens tidak pernah menyimpan barisnya — tanpa tambahan ini
+  // setiap pool v4 bersisi ETH tampil "? / OFY" di dasbor. Barisnya sengaja TIDAK
+  // ditulis ke tabel: yang memindai saldo (engine/holdings/manual) mengambil daftar
+  // alamatnya dari situ dan akan memanggil balanceOf ke alamat nol.
+  const tokenMeta = () => {
+    const m = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+    for (const [a, q] of Object.entries(QUOTES)) {
+      if (!m.get(a)?.symbol) m.set(a, { address: a, symbol: q.symbol, decimals: m.get(a)?.decimals ?? q.decimals });
+    }
+    return m;
+  };
   // Semua mesin di proses ini (satu per chain, wallet yang sama) — untuk ganti kunci.
   const engines = nets ? Object.values(nets).map((n) => n.engine) : [engine];
   // Daftar chain untuk pemilih di dasbor/Telegram.
@@ -359,7 +372,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
   // bisa menulis "688 rb DRIPPYPIGEON". Ikut di /api/overview: peringatannya
   // harus tampil di SEMUA halaman, bukan cuma kalau kebetulan membuka Posisi.
   const leftoverRows = () => {
-    const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+    const toks = tokenMeta();
     return engine.leftovers().map((it) => {
       const t = toks.get(String(it.token).toLowerCase());
       return { ...it, symbol: t?.symbol || null, decimals: t?.decimals ?? 18, amountNum: Number(it.amount || 0) / 10 ** (t?.decimals ?? 18) };
@@ -646,7 +659,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
   // syarat SQL (mis. "token0=? OR token1=?" atau "pool_ref=?") — bahan halaman
   // detail token dan detail pool, supaya keduanya menghitung PnL dengan cara sama.
   const lpRows = async (cond, args) => {
-    const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+    const toks = tokenMeta();
     const sym = (x) => toks.get(x)?.symbol || QUOTES[x]?.symbol || '?';
     const dec = (x) => toks.get(x)?.decimals ?? QUOTES[x]?.decimals ?? 18;
     const kOf = (q) => (chain.isEthLike(q) ? engine.ethUsd : 1);
@@ -926,7 +939,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       // Posisi tertutup cuma menyimpan alamat token; tanpa simbol, tabelnya hanya
       // deretan nomor NFT yang tidak bisa dikenali.
       const closed = store.all("SELECT * FROM positions WHERE chain=? AND status='closed' ORDER BY closed_ts DESC LIMIT 100", chain.network);
-      const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+      const toks = tokenMeta();
       // Daftarnya dari basis data, angkanya dari sinkron terakhir. Dulu daftarnya
       // langsung hasil sinkron (tiap 30 detik): sesudah restart tabel kosong sampai
       // sinkron pertama selesai, posisi yang baru dimint baru muncul ~30 detik
@@ -996,7 +1009,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       // Baris yang sudah 'closed' di DB adalah kebenaran: hasil sinkron terakhir masih
       // memuat posisi itu (nilai basi) sampai sinkron berikutnya, ~30 detik setelah tutup.
       const live = row.status === 'closed' ? null : engine.positions.live.find((p) => p.id === id);
-      const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+      const toks = tokenMeta();
       const k = chain.isEthLike(row.quote_symbol) ? engine.ethUsd : 1;
       const costUsd = (row.cost_quote || 0) * k;
       const outUsd = row.status === 'closed' ? (row.out_quote || 0) * k : null;
@@ -1044,7 +1057,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       const id = Number(url.searchParams.get('id'));
       const row = store.get('SELECT * FROM positions WHERE chain=? AND id=?', chain.network, id);
       if (!row) return { error: 'posisi tidak ditemukan' };
-      const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+      const toks = tokenMeta();
       const isEth = chain.isEthLike(row.quote_symbol);
       const k = isEth ? engine.ethUsd : 1;
       const parse = (d) => { try { return JSON.parse(d || '{}') || {}; } catch { return {}; } };
@@ -1562,7 +1575,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         SELECT a.*, d.verdict, d.reason, d.tx_hash AS decision_tx, d.plan
         FROM actions a LEFT JOIN decisions d ON d.action_id = a.id
         WHERE a.chain=? ORDER BY a.ts DESC, a.id DESC LIMIT ?`, chain.network, limit);
-      const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+      const toks = tokenMeta();
       const labels = new Map(store.all('SELECT address,label FROM targets WHERE chain=?', chain.network).map((t) => [t.address, t.label]));
       const mirrors = manual.openMirrorKeys();
       for (const r of rows) {
@@ -1620,12 +1633,12 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         WHERE a.chain=? AND a.id > ? AND a.kind = 'increase' AND a.ts > ?
           AND a.target IN (SELECT address FROM targets WHERE chain=? AND enabled = 1)
         ORDER BY a.id LIMIT 20`, chain.network, Number(raw), Date.now() - 15 * 60_000, chain.network);
-      const toks = new Map(store.all('SELECT address,symbol FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t.symbol]));
+      const toks = tokenMeta();
       const labels = new Map(store.all('SELECT address,label FROM targets WHERE chain=?', chain.network).map((t) => [t.address, t.label]));
       const items = rows.map((r) => ({
         kind: 'open', id: r.id, ts: r.ts, target: r.target, targetLabel: labels.get(r.target) || null,
         venue: r.venue, fee: r.fee, adding: !!r.adding,
-        token0: r.token0, token1: r.token1, symbol0: toks.get(r.token0) || null, symbol1: toks.get(r.token1) || null,
+        token0: r.token0, token1: r.token1, symbol0: toks.get(r.token0)?.symbol || null, symbol1: toks.get(r.token1)?.symbol || null,
         valueUsd: r.value_quote == null ? null
           : r.value_quote * (chain.isEthLike(r.quote_symbol) ? engine.ethUsd : 1),
         verdict: r.verdict || null, reason: r.reason || null, positionId: r.position_id || null,
@@ -1651,7 +1664,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
             kind: 'close', id: `c${r.id}`, ts: r.closed_ts, positionId: r.id, tokenId: r.token_id,
             target: r.target, targetLabel: r.target ? labels.get(r.target) || null : null, mirrorOf: r.mirror_of,
             venue: r.venue, fee: r.fee, mirrored: !!r.mirrored, txHash: r.tx_close,
-            token0: r.token0, token1: r.token1, symbol0: toks.get(r.token0) || null, symbol1: toks.get(r.token1) || null,
+            token0: r.token0, token1: r.token1, symbol0: toks.get(r.token0)?.symbol || null, symbol1: toks.get(r.token1)?.symbol || null,
             costUsd, outUsd, pnlUsd: outUsd - costUsd,
             pnlPct: costUsd > 0 ? ((outUsd - costUsd) / costUsd) * 100 : null,
             slipUsd: costs.of(r.id, engine.ethUsd).slipUsd || 0,
@@ -1741,7 +1754,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         if (!cur) firstLast.set(e.token_id, { entry: e.sqrt_price, exit: e.sqrt_price });
         else cur.exit = e.sqrt_price;
       }
-      const toks = new Map(store.all('SELECT address,symbol,decimals FROM tokens WHERE chain=?', chain.network).map((t) => [t.address, t]));
+      const toks = tokenMeta();
       // Token hasil tutup posisi yang masih dipegang dinilai ulang di harga pool
       // SEKARANG tiap kali halaman dibuka — angkanya hidup sampai tokennya dijual.
       for (const r of rows) { r.dec0 = toks.get(r.token0)?.decimals ?? 18; r.dec1 = toks.get(r.token1)?.decimals ?? 18; }
