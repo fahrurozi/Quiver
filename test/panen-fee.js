@@ -223,3 +223,36 @@ test('panen target dicatat, tidak dicermin, dan berbunyi kalau berulang', async 
     assert.equal(f.kabar.length, 1);
   } finally { f.store.db.close(); }
 });
+
+test('aturan follow_claim: panen target ikut mengklaim fee cermin', async () => {
+  const f = fixture();
+  try {
+    f.store.run('INSERT INTO targets(chain,address,enabled,added_ts,rules) VALUES(?,?,1,?,?)', 'robinhood', TARGET, Date.now(),
+      JSON.stringify({ exit: { follow_claim: true } }));
+    f.store.run('UPDATE positions SET mirror_of=? WHERE id=?', '777', f.id);
+    const aksi = (i, tokenId = '777') => {
+      const r = f.store.run(`INSERT INTO actions(chain,ts,block,tx_hash,log_index,target,venue,kind,token_id,pool_ref)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`, 'robinhood', Date.now(), 100 + i, '0x' + String(i).padStart(64, '0'), i,
+      TARGET, 'v4', 'claim', tokenId, POOL);
+      return f.e.actFromRow(f.store.get('SELECT * FROM actions WHERE id=?', Number(r.lastInsertRowid)));
+    };
+    await f.e.handle(aksi(1));
+    assert.equal(f.sent.length, 1);
+    assert.equal(f.sent[0].kind, 'claim_fees');
+    let d = f.store.get('SELECT * FROM decisions ORDER BY id DESC LIMIT 1');
+    assert.equal(d.verdict, 'copy');
+    assert.equal(d.position_id, f.id);
+    assert.equal(d.tx_hash, '0x' + '1'.padStart(64, '0'));
+    assert.match(d.reason, /ikut klaim fee posisi #/);
+    // Posisi target yang tidak kita cermin: tidak ada yang diklaim.
+    await f.e.handle(aksi(2, '999'));
+    assert.equal(f.sent.length, 1);
+    // Kendali manual: klaim tidak diikuti.
+    f.store.run('UPDATE positions SET takeover_ts=? WHERE id=?', Date.now(), f.id);
+    await f.e.handle(aksi(3));
+    assert.equal(f.sent.length, 1);
+    d = f.store.get('SELECT * FROM decisions ORDER BY id DESC LIMIT 1');
+    assert.equal(d.verdict, 'skip');
+    assert.match(d.reason, /kendali manual/);
+  } finally { f.store.db.close(); }
+});

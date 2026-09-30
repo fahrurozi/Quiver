@@ -67,6 +67,8 @@
   "🚪 Keluar posisi": "🚪 Exit rules",
   "Ikut keluar saat target keluar": "Close when the target closes",
   "Ikut menarik sebagian": "Follow partial withdrawals",
+  "Ikut klaim fee saat target panen": "Claim fees when the target harvests",
+  "Tiap klaim membayar gas. Fee dijual hanya kalau panen otomatis posisi mode klaim + jual.": "Every claim costs gas. Fees are sold only if the position's auto-harvest is set to claim + sell.",
   "Tutup kalau di luar rentang selama (menit)": "Close after time out of range (minutes)",
   "Tutup kalau harga lebih dari (%) di luar rentang": "Close if price is more than (%) outside the range",
   "Jarak ke tepi rentang terdekat, seperti \"di luar · 61% di atas\" di dasbor. Entry target yang sejauh ini ditunda, bukan disalin. 0 = mati.": "Distance to the nearest range edge, like \"out · 61% above\" in the dashboard. Target entries this far away are deferred, not copied. 0 = disabled.",

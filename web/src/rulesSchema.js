@@ -45,6 +45,7 @@ export const SCHEMA = [
   { group: 'Keluar', icon: 'ti-door-exit', fields: [
     { path: 'exit.follow_target', label: 'Ikut keluar saat target keluar', type: 'bool' },
     { path: 'exit.follow_partial', label: 'Ikut menarik sebagian (proporsional)', type: 'bool', when: (r) => r.exit.follow_target },
+    { path: 'exit.follow_claim', label: 'Ikut klaim fee saat target memanen fee', type: 'bool' },
     { path: 'exit.out_of_range_minutes', label: 'Tutup kalau di luar rentang selama (menit, 0=mati)', type: 'number', step: 5 },
     { path: 'exit.out_of_range_pct', label: 'Tutup kalau harga lebih dari (%) di luar rentang (0=mati)', type: 'number', step: 5 },
     { path: 'exit.reenter_within_pct', label: 'Buka lagi kalau harga kembali ≤ (%) dari rentang (0=mati)', type: 'number', step: 5, when: (r) => r.exit.out_of_range_pct > 0 },
@@ -94,6 +95,7 @@ export const RULE_HELP = {
   "swap.max_price_impact_bps": "Batas perubahan harga yang disebabkan ukuran swap itu sendiri. 100 bps = 1%. Berbeda dari slippage saat eksekusi.",
   "exit.follow_target": "Bot ikut menutup salinan ketika target keluar dari posisi. Aturan keluar mandiri di bawah tetap terpisah.",
   "exit.follow_partial": "Saat target menarik sebagian likuiditas, bot menarik bagian yang sebanding dari salinannya.",
+  "exit.follow_claim": "Saat target mengklaim fee posisinya, bot ikut mengklaim fee salinannya. Fee dijual ke aset kuotasi hanya kalau panen otomatis posisi itu mode klaim + jual. Tiap klaim membayar gas — bawaannya mati.",
   "exit.out_of_range_minutes": "Tutup posisi setelah terus berada di luar rentang selama durasi ini. Penghitung direset ketika kembali masuk rentang. 0 = nonaktif.",
   "exit.out_of_range_pct": "Tutup posisi begitu harga lebih jauh dari persentase ini di luar rentang — jarak ke tepi terdekat, angka yang sama dengan \"di luar · 61% di atas\" di daftar posisi. Modal tidak menganggur di posisi yang jauh dari harga. Berlaku juga saat masuk: entry target yang rentangnya sejauh ini ditunda, bukan disalin. Dua sinkron berturut-turut (~1 menit) sebelum ditutup. 0 = nonaktif.",
   "exit.reenter_within_pct": "Cermin yang ditunda atau ditutup karena jauh dibuka lagi begitu harga kembali sedekat ini dari rentang, selama posisi target masih terbuka. Ukurannya dihitung ulang dari likuiditas target saat itu. Harus lebih kecil dari ambang tutup supaya tidak buka-tutup di satu harga. 0 = nonaktif.",

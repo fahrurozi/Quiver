@@ -425,6 +425,7 @@ const RULE_GROUPS = [
     g: 'exit', title: '🚪 Keluar posisi', fields: [
       F.bool('follow_target', 'Ikut keluar saat target keluar'),
       F.bool('follow_partial', 'Ikut menarik sebagian', { when: (r) => r.exit.follow_target }),
+      F.bool('follow_claim', 'Ikut klaim fee saat target panen', { help: 'Tiap klaim membayar gas. Fee dijual hanya kalau panen otomatis posisi mode klaim + jual.' }),
       F.int('out_of_range_minutes', 'Tutup kalau di luar rentang selama (menit)', { help: '0 = mati.' }),
       F.pct('out_of_range_pct', 'Tutup kalau harga lebih dari (%) di luar rentang', { help: 'Jarak ke tepi rentang terdekat, seperti "di luar · 61% di atas" di dasbor. Entry target yang sejauh ini ditunda, bukan disalin. 0 = mati.' }),
       F.pct('reenter_within_pct', 'Buka lagi kalau harga kembali ≤ (%) dari rentang', { help: 'Hanya kalau posisi target masih terbuka. Harus lebih kecil dari ambang tutup. 0 = mati.' }),

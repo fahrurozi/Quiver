@@ -95,6 +95,14 @@ const rules = [
   [/^sebelum tutup #(\d+): (.+)$/s, 'Before closing position #{1}: {2}', 'Sebelum menutup posisi #{1}: {2}'],
   [/^eksekusi masuk: (.+)$/s, 'Opening transaction failed: {1}', 'Transaksi pembukaan gagal: {1}'],
   [/^catat hasil jual sisa(?: #(\d+))?: (.+)$/s, 'Could not record leftover sale proceeds {1}: {2}', 'Hasil penjualan sisa {1} tidak dapat dicatat: {2}'],
+  [/^target panen fee$/, 'The target harvested fees', 'Target memanen fee'],
+  [/^target panen fee \(ke-(\d+) dalam 24 jam\)$/, 'The target harvested fees ({1}× in 24 h)', 'Target memanen fee (ke-{1} dalam 24 jam)'],
+  [/^ikut klaim fee posisi #(\d+)(.*)$/s, 'Claimed fees on position #{1}{2}', 'Ikut mengklaim fee posisi #{1}{2}'],
+  [/^klaim fee posisi #(\d+) gagal: (.+)$/s, 'Fee claim on position #{1} failed: {2}', 'Klaim fee posisi #{1} gagal: {2}'],
+  [/^cermin posisi #(\d+)$/, 'mirrored by position #{1}', 'cermin posisi #{1}'],
+  [/^klaim tidak dicermin$/, 'claim not mirrored', 'klaim tidak dicermin'],
+  [/^posisi #(\d+) dalam kendali manual$/, 'Position #{1} is under manual control', 'Posisi #{1} dalam kendali manual'],
+  [/^klaim tidak diikuti$/, 'claim not followed', 'klaim tidak diikuti'],
   [/^coba ulang jual sisa #(\d+): (.+)$/s, 'Retrying the leftover sale for position #{1}: {2}', 'Mencoba kembali penjualan sisa posisi #{1}: {2}'],
 ];
 const orderedFragments = Object.entries(fragments).sort((a,b)=>b[0].length-a[0].length);

@@ -538,7 +538,7 @@ class Engine {
     if (act.kind === 'custody_out') return this.decide(act.id, 'skip', 'posisi dititipkan ke kontrak otomasi — bukan sinyal keluar');
     if (act.kind === 'custody_in') return this.decide(act.id, 'skip', 'posisi dikembalikan dari kontrak otomasi');
     if (act.kind === 'transfer_in') return this.decide(act.id, 'skip', 'target menerima posisi dari wallet lain — tidak dicermin');
-    if (act.kind === 'claim') return this.noteTargetClaim(act);
+    if (act.kind === 'claim') return this.noteTargetClaim(act, rules);
     return this.decide(act.id, 'skip', `jenis aksi ${act.kind} tidak dicermin`);
   }
 
@@ -548,18 +548,22 @@ class Engine {
   static CLAIM_SIGNAL_MIN = 3;
   static CLAIM_SIGNAL_QUIET_MS = 6 * 3600_000;
 
-  // Target memanen fee. TIDAK dicermin: klaim bukan aksi pasar, tidak ada alpha yang
-  // hilang kalau kita telat, dan menirunya cuma membayar gas mengikuti kebiasaan orang
-  // lain (fee posisi kita dipanen dengan aturan sendiri — lihat Compound). Yang dipakai
-  // dari sini cuma polanya: panen berulang pada posisi yang kita cermin sering
-  // mendahului keluarnya target, dan itu layak dikabarkan sekali.
-  async noteTargetClaim(act) {
+  // Target memanen fee. Bawaannya TIDAK dicermin: klaim bukan aksi pasar, tidak ada
+  // alpha yang hilang kalau kita telat, dan menirunya cuma membayar gas mengikuti
+  // kebiasaan orang lain (fee posisi kita dipanen dengan aturan sendiri — lihat
+  // Compound). Aturan exit.follow_claim menyalakannya: fee cermin ikut diklaim (dan
+  // dijual kalau panen otomatis posisi itu mode klaim+jual). Selain itu yang dipakai
+  // cuma polanya: panen berulang pada posisi yang kita cermin sering mendahului
+  // keluarnya target, dan itu layak dikabarkan sekali.
+  async noteTargetClaim(act, rules = null) {
     const sejak = Date.now() - 24 * 3600_000;
     const n = this.store.get(`SELECT COUNT(*) c FROM actions WHERE chain=? AND target=? AND kind='claim'
       AND token_id=? AND ts>=?`, this.network, act.target, String(act.tokenId ?? ''), sejak)?.c || 0;
-    const mirror = this.store.get(`SELECT id FROM positions WHERE chain=? AND status='open' AND target=? AND mirror_of=?`,
+    const mirror = this.store.get(`SELECT id, takeover_ts FROM positions WHERE chain=? AND status='open' AND target=? AND mirror_of=?`,
       this.network, act.target, String(act.tokenId ?? ''));
-    this.decide(act.id, 'skip', `target panen fee${n > 1 ? ` (ke-${n} dalam 24 jam)` : ''}${mirror ? ` — cermin posisi #${mirror.id}` : ''} — klaim tidak dicermin`);
+    const what = `target panen fee${n > 1 ? ` (ke-${n} dalam 24 jam)` : ''}`;
+    if (mirror && rules?.exit?.follow_claim) await this.followTargetClaim(act, mirror, what);
+    else this.decide(act.id, 'skip', `${what}${mirror ? ` — cermin posisi #${mirror.id}` : ''} — klaim tidak dicermin`);
     if (!mirror || n < Engine.CLAIM_SIGNAL_MIN) return;
     const key = this.sk(`claim_signal:${act.tokenId}`);
     const last = Number(this.store.getState(key, '0')) || 0;
@@ -570,6 +574,21 @@ class Engine {
     const pair = toks.length === 2 ? `${toks[0]?.symbol || '?'}/${toks[1]?.symbol || '?'}` : '';
     this.notify(`target memanen fee ${n}× dalam 24 jam di ${pair || 'pool cermin'} (posisi #${mirror.id}) — sering mendahului keluarnya target`,
       { kind: 'target_claim', positionId: mirror.id, target: act.target, mirrorOf: act.tokenId, count: n, pair });
+  }
+
+  // Ikut klaim fee cermin. Gagal klaim tidak dicoba ulang: fee-nya tidak ke mana-mana,
+  // panen otomatis / klaim berikutnya tetap mengambilnya.
+  async followTargetClaim(act, mirror, what) {
+    if (mirror.takeover_ts != null) return this.decide(act.id, 'skip', `${what} — posisi #${mirror.id} dalam kendali manual — klaim tidak diikuti`);
+    if (this.dryRun() || !this.exec.address()) return this.decide(act.id, 'dry', `${what} — ikut klaim fee posisi #${mirror.id}`, null, null, mirror.id);
+    try {
+      const r = await this.claimFees(mirror.id, { quiet: true });
+      const usd = r.claimedUsd != null ? ` $${r.claimedUsd.toFixed(2)}` : '';
+      const note = r.pending ? ' (menunggu konfirmasi)' : r.sold ? ` · ${r.sold}` : '';
+      this.decide(act.id, 'copy', `${what} — ikut klaim fee posisi #${mirror.id}${usd}${note}`, null, r.tx || null, mirror.id);
+    } catch (e) {
+      this.decide(act.id, 'skip', `${what} — klaim fee posisi #${mirror.id} gagal: ${String(e.message).slice(0, 200)}`, null, null, mirror.id);
+    }
   }
 
   // Likuiditas & volume pool dari DexScreener untuk saringan entry, atau null kalau

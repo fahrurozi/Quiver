@@ -46,6 +46,7 @@ const DEFAULTS = {
   exit: {
     follow_target: true,      // ikut keluar kalau target keluar
     follow_partial: true,     // decrease proporsional
+    follow_claim: false,      // ikut klaim fee cermin saat target memanen fee
     out_of_range_minutes: 0,  // 0 = mati
     // Tutup kalau harga sudah lebih dari X% di luar rentang (jarak ke tepi terdekat, angka
     // yang sama dengan "di luar · N% di atas" di dasbor). Modal tidak menganggur di posisi
@@ -108,7 +109,7 @@ const RULE_SPEC = {
   onesided: { policy: ['enum', ['copy', 'skip', 'recenter']], max_quote_usd: ['num', 0, 1e9] },
   swap: { enabled: ['bool'], max_slippage_bps: ['int', 0, 5000], max_price_impact_bps: ['int', 0, 10_000] },
   exit: {
-    follow_target: ['bool'], follow_partial: ['bool'],
+    follow_target: ['bool'], follow_partial: ['bool'], follow_claim: ['bool'],
     out_of_range_minutes: ['num', 0, 1e7], out_of_range_pct: ['num', 0, 1e6], reenter_within_pct: ['num', 0, 1e6],
     stop_loss_pct: ['num', 0, 100], take_profit_pct: ['num', 0, 1e6],
     max_age_hours: ['num', 0, 1e6], sell_leftover: ['bool'], sell_max_loss_bps: ['int', 0, 10_000],
