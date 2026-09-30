@@ -2091,6 +2091,11 @@ const EN = {
   'Ulangi password': 'Repeat password',
   'min. 8 karakter': 'min. 8 characters',
   'Password keystore': 'Keystore password',
+  'Jual {m} dari fee ke {q} sekalian': 'Also sell the {m} from the fees for {q}',
+  'Dijual lewat Kyber tepat sesudah klaim. {q} dari fee tetap di wallet.': 'Sold through Kyber right after the claim. The {q} part of the fees stays in the wallet.',
+  'Fee dijual': 'Fees sold',
+  'Fee belum terjual': 'Fees not sold yet',
+  'Masuk antrean jual dan dicoba lagi otomatis. {e}': 'Queued for sale and retried automatically. {e}',
 };
 
 const DICT = { id: null, en: EN };

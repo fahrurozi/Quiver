@@ -1923,13 +1923,15 @@ class Engine {
       }
       try { await this.positions.sync(this.ethUsd); } catch { /* sinkron berikutnya mencoba lagi */ }
       let sold = null;
+      let sellError = null;
       if (this.sellFeeWanted(id, opts.sell)) {
         // Gagal menjual bukan gagal klaim: fee-nya sudah di wallet dan itemnya sudah
-        // masuk antrean jual (retryLeftovers), jadi klaimnya tetap dilaporkan berhasil.
+        // masuk antrean jual (retryLeftovers), jadi klaimnya tetap dilaporkan berhasil —
+        // dengan sellError supaya pemanggil bisa bilang "masuk antrean", bukan diam.
         try { sold = await this.sellClaimedFee(pos, hash, result, { quiet: !!opts.quiet }); }
-        catch (e) { this.store.log('warn', `jual fee posisi #${id}: ${e.message}`, { quiet: true }); }
+        catch (e) { sellError = e.message; this.store.log('warn', `jual fee posisi #${id}: ${e.message}`, { quiet: true }); }
       }
-      return { ok: true, tx: hash, ...result, sold };
+      return { ok: true, tx: hash, ...result, sold, sellError };
     } finally { this.exiting.delete(id); }
   }
 

@@ -897,5 +897,8 @@
   "✅ Ya": "✅ Yes",
   "❌ Tidak": "❌ No",
   "Total modal posisi ini {0}": "Total capital in this position {0}",
-  "📱 Buka mini app": "📱 Open mini app"
+  "📱 Buka mini app": "📱 Open mini app",
+  "💱 Claim + jual {0}": "💱 Claim + sell {0}",
+  "💱 {0}": "💱 {0}",
+  "⚠️ Fee belum terjual — masuk antrean jual dan dicoba lagi otomatis: {0}": "⚠️ Fees not sold yet — queued for sale and retried automatically: {0}"
 }

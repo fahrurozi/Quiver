@@ -1121,17 +1121,25 @@ class Telegram {
         const d = await this.api('GET', '/api/positions');
         const p = (d.positions || []).find((x) => String(x.id) === rest[0]);
         if (!p) return out(tr("Posisi #{0} tidak ada di daftar terbuka.", [esc(rest[0])]), kb([[BACK_HOME]]));
+        // Dua tombol: klaim saja, atau klaim lalu jual sisi memecoin fee ke aset kuotasi.
+        const meme = (p.quoteSide === 1 ? p.symbol0 : p.symbol1) || 'token';
         return out(tr("💰 <b>Claim fee posisi #{0}?</b>\nPerkiraan fee: {1}. Fee dikirim ke wallet dalam token pool. Likuiditas tetap terbuka; gas tetap dibayar.", [esc(p.id), usd(p.feeUsd)]),
-          kb([[btn(tr("✅ Claim fee"), `pF:${p.id}`)], [btn(tr("↩︎ Posisi"), `p:${p.id}`)]]));
+          kb([[btn(tr("✅ Claim fee"), `pF:${p.id}:0`)], [btn(tr("💱 Claim + jual {0}", [esc(meme)]), `pF:${p.id}:1`)], [btn(tr("↩︎ Posisi"), `p:${p.id}`)]]));
       }
       case 'pF': {
         if (ack) await ack(tr("Mengirim transaksi…"));
         await out(tr("⏳ Mengklaim fee… menunggu konfirmasi di chain."));
-        const r = await this.api('POST', '/api/positions/claim', { id: Number(rest[0]) });
-        const message = r.error ? tr("❌ Claim fee gagal: {0}", [esc(note(r.error))])
+        // Tombol lama (tanpa :0/:1) mengikuti setelan panen posisi.
+        const sell = rest[1] === '1' ? true : rest[1] === '0' ? false : null;
+        const r = await this.api('POST', '/api/positions/claim', { id: Number(rest[0]), ...(sell == null ? {} : { sell }) });
+        let message = r.error ? tr("❌ Claim fee gagal: {0}", [esc(note(r.error))])
           : r.pending ? tr("⏳ Claim fee masih diproses. Cek lagi sebentar. Tx: {0}", [esc(r.tx)])
           : r.accountingPending ? tr("✅ Fee sudah diklaim. Pencatatan nominal menunggu sinkronisasi. Tx: {0}", [esc(r.tx)])
           : tr("✅ Fee diklaim ke wallet. Posisi tetap terbuka. Tx: {0}", [esc(r.tx)]);
+        if (!r.error && !r.pending) {
+          if (r.sold) message += '\n' + tr("💱 {0}", [esc(note(r.sold))]);
+          else if (r.sellError) message += '\n' + tr("⚠️ Fee belum terjual — masuk antrean jual dan dicoba lagi otomatis: {0}", [esc(note(r.sellError))]);
+        }
         return out(message, kb([[btn(tr("↩︎ Posisi"), `p:${rest[0]}`), BACK_HOME]]));
       }
       case 'pC': {

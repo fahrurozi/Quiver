@@ -1472,15 +1472,25 @@ const buttons = (o) => (o?.params?.reply_markup?.inline_keyboard || []).flat().m
   await t('claim fee Telegram meminta konfirmasi lalu memakai endpoint bersama', async () => {
     const w = build({ dryRun: false });
     const calls = [];
-    w.engine.claimFees = async (id) => { calls.push(id); return { ok: true, tx: '0xclaim', claimedUsd: 1.5 }; };
+    w.engine.claimFees = async (id, opts) => {
+      calls.push([id, opts.sell]);
+      return { ok: true, tx: '0xclaim', claimedUsd: 1.5, ...(opts.sell ? { sold: 'jual MEME → $1.20 (kyber)' } : {}) };
+    };
     await w.bot.handle(cbq('p:1'));
     assert.ok(buttons(lastOut(w.sent)).includes('pf:1'));
     await w.bot.handle(cbq('pf:1'));
     assert.deepStrictEqual(calls, []);
-    assert.ok(buttons(lastOut(w.sent)).includes('pF:1'));
-    await w.bot.handle(cbq('pF:1'));
-    assert.deepStrictEqual(calls, [1]);
+    assert.ok(buttons(lastOut(w.sent)).includes('pF:1:0'));
+    assert.ok(buttons(lastOut(w.sent)).includes('pF:1:1'), 'tombol claim + jual');
+    await w.bot.handle(cbq('pF:1:0'));
+    assert.deepStrictEqual(calls, [[1, false]]);
     assert.match(lastOut(w.sent).params.text, /tetap terbuka/);
+    await w.bot.handle(cbq('pF:1:1'));
+    assert.deepStrictEqual(calls[1], [1, true]);
+    assert.match(lastOut(w.sent).params.text, /jual MEME/);
+    // tombol lama di chat (tanpa :0/:1): ikut setelan panen posisi
+    await w.bot.handle(cbq('pF:1'));
+    assert.deepStrictEqual(calls[2], [1, null]);
     assert.ok((await w.api('POST', '/api/positions/claim', { id: -1 })).error);
   });
 
