@@ -312,6 +312,120 @@ const jawaban = (extra = {}) => ({
     }
   });
 
+  // ---- pulihkan dari cadangan (jalur kedua wizard) ----
+  console.log('\npulihkan dari cadangan');
+  const { ethers } = require('ethers');
+  const { Store } = require('../src/db');
+  const { createBackup } = require('../src/backup');
+  const { applyRestore } = require('../src/setup');
+  // Cadangan dari "mesin lain": jalur absolut asing, token lama di berkas, LIVE, RPC ${RAHASIA_RPC}.
+  const buatCadangan = async () => {
+    const d = tmpdir();
+    const cfgPath = path.join(d, 'config.json');
+    const cfg = JSON.parse(JSON.stringify(TEMPLATE));
+    cfg.server = { ...cfg.server, port: 20180, auth_token: 'token-lama-mesin-asal' };
+    cfg.db = { path: '/home/orang-lain/lpcopy/data/lpcopy.db' };
+    cfg.wallet = { key_file: '/home/orang-lain/.lpcopy/key' };
+    cfg.mode = { dry_run: false };
+    cfg.chains.robinhood.chain.endpoints.unshift({ url: 'https://rpc.contoh.test/v2/${RAHASIA_RPC}' });
+    cfg.chains.robinhood.rules = { ...(cfg.chains.robinhood.rules || {}), penanda: 'dari-cadangan' };
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg));
+    const dbPath = path.join(d, 'lpcopy.db');
+    const store = new Store(dbPath);
+    for (let i = 0; i < 4; i++) store.run(`INSERT INTO positions(venue,pool_ref,token_id,token0,token1,tick_lower,tick_upper,status,opened_ts,cost_quote,quote_symbol,liquidity)
+      VALUES('v4','0xp',?,'0xa','0xb',-1,1,'closed',1,10,'USDG','0')`, String(i));
+    const wallet = ethers.Wallet.createRandom();
+    const b = await createBackup({ parts: { config: true, db: true, wallet: true }, cfgPath, db: store.db, dbPath, wallet, password: 'password-kuat', meta: { instance: 'asal' } });
+    store.db.close();
+    return { backup: JSON.parse(JSON.stringify(b)), address: wallet.address.toLowerCase() };
+  };
+  const mesinBaru = () => {
+    const d = tmpdir();
+    fs.copyFileSync(path.join(ROOT, 'config.example.json'), path.join(d, 'config.example.json'));
+    fs.copyFileSync(path.join(ROOT, '.env.example'), path.join(d, '.env.example'));
+    return { d, cfgPath: path.join(d, 'config.json'), envPath: path.join(d, '.env') };
+  };
+  const src = await buatCadangan();
+  const aman = async (fn) => {
+    const homeAsli = process.env.HOME;
+    const home = tmpdir();
+    process.env.HOME = home;
+    try { return await fn(home); } finally {
+      process.env.HOME = homeAsli;
+      delete process.env.LPCOPY_AUTH_TOKEN; delete process.env.RAHASIA_RPC; delete process.env.LAIN_LAIN;
+    }
+  };
+
+  await t('lengkap: config milik mesin ini, basis data & wallet terpasang, selalu simulasi', () => aman(async (home) => {
+    const m = mesinBaru();
+    const r = await applyRestore({ root: m.d, cfgPath: m.cfgPath, envPath: m.envPath, backup: src.backup, parts: { db: true, wallet: true },
+      password: 'password-kuat', token: 'token-baru-mesin-ini', port: 8911, env: { RAHASIA_RPC: 'k123', LAIN_LAIN: 'x' } });
+    const cfg = JSON.parse(fs.readFileSync(m.cfgPath, 'utf8'));
+    assert.equal(cfg.server.port, 8911);
+    assert.equal(cfg.server.auth_token, null, 'token mesin asal tidak dibawa');
+    assert.equal(cfg.mode.dry_run, true);
+    assert.equal(cfg.db.path, 'data/lpcopy.db', 'jalur asing jatuh ke bawaan');
+    assert.equal(cfg.wallet.key_file, '~/.lpcopy/key');
+    assert.equal(cfg.chains.robinhood.rules.penanda, 'dari-cadangan');
+    assert.ok(cfg.setup.restored_from);
+    const env = fs.readFileSync(m.envPath, 'utf8');
+    assert.match(env, /^LPCOPY_AUTH_TOKEN=token-baru-mesin-ini$/m);
+    assert.match(env, /^RAHASIA_RPC=k123$/m);
+    assert.ok(!/LAIN_LAIN/.test(env), 'variabel yang tidak dirujuk config tidak boleh ditulis');
+    const s2 = new Store(path.join(m.d, 'data', 'lpcopy.db'));
+    assert.equal(s2.get('SELECT COUNT(*) n FROM positions').n, 4);
+    s2.db.close();
+    const kunci = fs.readFileSync(path.join(home, '.lpcopy', 'key'), 'utf8').trim();
+    assert.equal(new ethers.Wallet(kunci).address.toLowerCase(), src.address);
+    assert.equal(r.wallet.address, src.address);
+  }));
+
+  await t('password keystore salah: tidak ada satu berkas pun yang ditulis', () => aman(async (home) => {
+    const m = mesinBaru();
+    await assert.rejects(applyRestore({ root: m.d, cfgPath: m.cfgPath, envPath: m.envPath, backup: src.backup, parts: { db: true, wallet: true },
+      password: 'salah-salah', token: 'token-baru-mesin-ini', port: 8911 }), /Password keystore salah/);
+    for (const f of [m.cfgPath, m.envPath, path.join(m.d, 'data', 'lpcopy.db'), path.join(m.d, 'data', 'lpcopy.db.restore-pending'), path.join(home, '.lpcopy', 'key')]) {
+      assert.ok(!fs.existsSync(f), `${f} tertulis`);
+    }
+  }));
+
+  await t('tanpa basis data/wallet, token pendek, port ngawur, berkas tanpa config', () => aman(async () => {
+    const m = mesinBaru();
+    const base = { root: m.d, cfgPath: m.cfgPath, envPath: m.envPath, backup: src.backup, token: 'token-baru-mesin-ini', port: 8911 };
+    await assert.rejects(applyRestore({ ...base, token: 'pendek' }), /minimal 12/);
+    await assert.rejects(applyRestore({ ...base, port: 99999 }), /Port dasbor/);
+    await assert.rejects(applyRestore({ ...base, backup: { ...src.backup, parts: { db: src.backup.parts.db } } }), /tidak berisi pengaturan/);
+    assert.ok(!fs.existsSync(m.cfgPath));
+    await applyRestore(base);   // cuma pengaturan
+    assert.ok(fs.existsSync(m.cfgPath));
+    assert.ok(!fs.existsSync(path.join(m.d, 'data', 'lpcopy.db')), 'basis data tidak diminta');
+  }));
+
+  await t('lewat server wizard: inspect menyebut variabel yang kurang, restore melepas port', () => aman(async () => {
+    const m = mesinBaru();
+    const port = 8900 + Math.floor(Math.random() * 90);
+    process.env.LPCOPY_SETUP_PORT = String(port);
+    process.env.LPCOPY_SETUP_HOST = '127.0.0.1';
+    try {
+      const selesai = runSetup({ root: m.d, cfgPath: m.cfgPath, envPath: m.envPath, log: () => {} });
+      const code = fs.readFileSync(path.join(m.d, 'data', 'setup-code.txt'), 'utf8').trim();
+      const post = (p, body, kode = code) => fetch(`http://127.0.0.1:${port}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-code': kode }, body: JSON.stringify(body) }).then((r) => r.json());
+      assert.match((await post('/api/setup/restore', { backup: src.backup }, 'salah123')).error, /Kode pemasangan salah/);
+      const ins = await post('/api/setup/restore/inspect', { config: src.backup.parts.config.json });
+      assert.deepEqual(ins.envVars.filter((v) => !v.set).map((v) => v.name), ['RAHASIA_RPC']);
+      assert.equal(ins.backupPort, 20180);
+      const r = await post('/api/setup/restore', { backup: src.backup, parts: { db: true }, token: 'token-baru-mesin-ini', port });
+      assert.equal(r.ok, true, r.error);
+      assert.equal(r.restored, true);
+      assert.equal(r.samePort, true);
+      await selesai;
+      assert.equal(JSON.parse(fs.readFileSync(m.cfgPath, 'utf8')).server.port, port);
+    } finally {
+      delete process.env.LPCOPY_SETUP_PORT;
+      delete process.env.LPCOPY_SETUP_HOST;
+    }
+  }));
+
   console.log(`\n${pass} lulus, ${fail} gagal`);
   process.exit(fail ? 1 : 0);
 })();

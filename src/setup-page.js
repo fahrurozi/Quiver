@@ -206,6 +206,45 @@ var EN = {
   "Boleh kosong — target juga bisa dicari dan ditambahkan dari halaman Target setelah bot jalan.": "May stay empty — targets can also be researched and added from the Targets page once the bot is running.",
 
   "Periksa lalu simpan": "Review, then save",
+  "Cara memasang": "How to set up",
+  "Pasang baru": "Fresh install",
+  "Wallet, token, chain, dan batas modal diisi langkah demi langkah.": "Wallet, token, chains and capital limits, step by step.",
+  "Pulihkan dari cadangan": "Restore from backup",
+  "Pakai berkas cadangan dari Pengaturan → Cadangan di instance lain: pengaturan, dan kalau ada, basis data serta wallet.": "Use a backup file from Settings → Backup on another instance: its settings and, when included, its database and wallet.",
+  "Pilih berkas cadangan (.json) yang diunduh dari Pengaturan → Cadangan. Bot menyala dalam mode simulasi; LIVE dinyalakan lagi dari dasbor.": "Choose the backup file (.json) downloaded from Settings → Backup. The bot starts in simulation mode; switch LIVE back on from the dashboard.",
+  "Berkas cadangan": "Backup file",
+  "Dibuat": "Created",
+  "Instance": "Instance",
+  "Isi": "Contents",
+  "pengaturan": "settings",
+  "basis data": "database",
+  "wallet": "wallet",
+  "Basis data": "Database",
+  "{n} posisi ({o} terbuka)": "{n} positions ({o} open)",
+  "Riwayat posisi, transaksi, ekuitas, dan riset target. Tanpa ini bot mulai dengan riwayat kosong.": "Position history, transactions, equity and target research. Without it the bot starts with an empty history.",
+  "Kunci sudah diatur lewat <code>LPCOPY_PRIVATE_KEY</code> di .env — bagian ini dilewati.": "The key is already set through <code>LPCOPY_PRIVATE_KEY</code> in .env — this part is skipped.",
+  "Keystore terenkripsi; dibuka dengan password yang dipakai saat mencadangkan.": "Encrypted keystore; opened with the password used when backing up.",
+  "Password keystore": "Keystore password",
+  "Token baru untuk mesin ini, disimpan di .env.": "A new token for this machine, stored in .env.",
+  "Port dasbor": "Dashboard port",
+  "Di instance asal: {p}.": "On the original instance: {p}.",
+  "Port yang sedang dipakai halaman ini pasti bebas.": "The port this page is using is guaranteed to be free.",
+  "Variabel .env yang dirujuk RPC": ".env variables used by RPC",
+  "URL RPC di config memakai nilai ini dari .env, dan mesin ini belum punya. Boleh dikosongkan — endpoint-nya gagal sampai diisi.": "RPC URLs in the config take these values from .env, and this machine does not have them yet. They may stay empty — those endpoints fail until filled in.",
+  "Kalau instance asal masih jalan dengan wallet yang sama, matikan dulu — dua bot di satu wallet saling bertabrakan, dan bot Telegram yang sama hanya bisa dipakai satu instance.": "If the original instance is still running with the same wallet, stop it first — two bots on one wallet collide, and one Telegram bot can only serve one instance.",
+  "Pulihkan & nyalakan": "Restore & start",
+  "Memulihkan…": "Restoring…",
+  "Pilih berkas cadangan dulu.": "Choose a backup file first.",
+  "Isi password keystore, atau hapus centang Wallet.": "Enter the keystore password, or untick Wallet.",
+  "Port dasbor harus angka 1–65535.": "The dashboard port must be a number from 1 to 65535.",
+  "Cadangan sudah dipulihkan{w}. Bot menyala dalam mode simulasi — halaman ini pindah sendiri ke dasbor begitu siap.": "The backup is restored{w}. The bot starts in simulation mode — this page moves to the dashboard on its own once it is ready.",
+  "Berkas cadangan bukan JSON yang valid.": "The backup file is not valid JSON.",
+  "Bukan berkas cadangan Quiver.": "This is not a Quiver backup file.",
+  "Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.": "This backup has no settings — do a fresh install, then restore the rest from Settings → Backup.",
+  "Password keystore salah, atau keystore di berkas cadangan rusak.": "Wrong keystore password, or the keystore in the backup file is damaged.",
+  "Versi berkas cadangan lebih baru dari bot ini — perbarui bot dulu.": "This backup was made by a newer version — update the bot first.",
+  "Basis data di berkas cadangan rusak (hash tidak cocok).": "The database in the backup file is damaged (hash mismatch).",
+  "Berkas basis data bukan milik Quiver (tabel positions/state tidak ada).": "The database file is not a Quiver database (positions/state tables missing).",
   "Setelah disimpan, berkas ditulis dan bot langsung menyala di proses ini — tidak perlu restart.": "Once saved, the files are written and the bot starts in this very process — no restart needed.",
   "Chain": "Chains",
   "Wallet": "Wallet",
@@ -311,9 +350,13 @@ var S = {
   wallet: { mode: 'generate', address: null },
   chains: {},
   capital: { dry_run: true, fixed_quote_usd: '', min_quote_usd: '', max_quote_per_position_usd: '', max_total_exposure_usd: '', daily_budget_usd: '' },
-  targets: []
+  targets: [],
+  // Jalur pulihkan: berkas cadangan dari Pengaturan → Cadangan menggantikan semua langkah.
+  flow: 'new',
+  r: { backup: null, name: '', size: 0, parts: { db: true, wallet: true }, password: '', port: '', env: {}, envVars: [], backupPort: null }
 };
 var TITLES = ['Mulai', 'Akses dasbor', 'Wallet bot', 'Chain & RPC', 'Pemberitahuan', 'Modal & target', 'Periksa & simpan'];
+var TITLES_R = ['Mulai', 'Pulihkan dari cadangan'];
 var $ = function (s) { return document.querySelector(s); };
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
@@ -338,7 +381,15 @@ function paneMulai() {
     + '<p class="lede">' + t('Beberapa langkah untuk menyiapkan wallet, token akses, chain, dan batas modal. Semuanya bisa diubah lagi nanti dari halaman Pengaturan.') + '</p>'
     + '<div class="row"><label for="code">' + t('Kode pemasangan') + '</label>'
     + '<input id="code" class="mono" autofocus autocomplete="off" spellcheck="false" placeholder="' + t('8 karakter') + '" value="' + esc(S.code) + '">'
-    + '<p class="hint">' + t('Tercetak di terminal tempat Quiver dijalankan. Lupa? <code>cat data/setup-code.txt</code> — atau <code>pm2 logs</code> kalau jalan di bawah pm2.') + '</p></div>';
+    + '<p class="hint">' + t('Tercetak di terminal tempat Quiver dijalankan. Lupa? <code>cat data/setup-code.txt</code> — atau <code>pm2 logs</code> kalau jalan di bawah pm2.') + '</p></div>'
+    + '<div class="row"><label>' + t('Cara memasang') + '</label>'
+    + pilihFlow('new', 'Pasang baru', 'Wallet, token, chain, dan batas modal diisi langkah demi langkah.')
+    + pilihFlow('restore', 'Pulihkan dari cadangan', 'Pakai berkas cadangan dari Pengaturan → Cadangan di instance lain: pengaturan, dan kalau ada, basis data serta wallet.')
+    + '</div>';
+}
+function pilihFlow(v, judul, ket) {
+  return '<label class="pick' + (S.flow === v ? ' on' : '') + '"><input type="radio" name="flow" value="' + v + '"' + (S.flow === v ? ' checked' : '') + '>'
+    + '<span><span class="t">' + t(judul) + '</span><span class="d">' + t(ket) + '</span></span></label>';
 }
 function selCurrency() {
   // Nama mata uang datang dari server dalam dua bahasa (fx.js CURRENCIES/_EN); kode
@@ -486,22 +537,82 @@ function paneRingkas() {
   return h;
 }
 
+function mb(n) { return n < 1e6 ? Math.max(1, Math.round(n / 1e3)) + ' KB' : (n / 1e6).toFixed(1) + ' MB'; }
+function panePulih() {
+  var R = S.r, b = R.backup;
+  var h = '<h2>' + t('Pulihkan dari cadangan') + '</h2>'
+    + '<p class="lede">' + t('Pilih berkas cadangan (.json) yang diunduh dari Pengaturan → Cadangan. Bot menyala dalam mode simulasi; LIVE dinyalakan lagi dari dasbor.') + '</p>'
+    + '<div class="row"><label for="rf">' + t('Berkas cadangan') + '</label>'
+    + '<input id="rf" type="file" accept=".json,application/json" style="height:auto;padding:.5rem">'
+    + (R.name ? '<p class="hint mono">' + esc(R.name) + ' · ' + mb(R.size) + '</p>' : '') + '</div>';
+  if (!b) return h;
+  var P = b.parts || {};
+  var isi = [P.config ? t('pengaturan') : null, P.db ? t('basis data') : null, P.wallet ? t('wallet') : null].filter(Boolean).join(', ');
+  var baris = function (k, v) { return '<div><b>' + t(k) + '</b><span>' + v + '</span></div>'; };
+  h += '<div class="sum" style="margin-bottom:1rem">'
+    + baris('Dibuat', esc(new Date(b.createdAt).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US')))
+    + baris('Instance', '<span class="mono">' + esc(b.instance || '—') + '</span>' + (b.chains && b.chains.length ? ' · ' + esc(b.chains.join(', ')) : ''))
+    + baris('Isi', isi || '—')
+    + '</div>';
+  if (!P.config) return h;
+  var cek = function (k, judul, ket) {
+    return '<label class="pick' + (R.parts[k] ? ' on' : '') + '"><input type="checkbox" data-part="' + k + '"' + (R.parts[k] ? ' checked' : '') + '>'
+      + '<span><span class="t">' + judul + '</span><span class="d">' + ket + '</span></span></label>';
+  };
+  if (P.db) {
+    var st = P.db.stats || {};
+    h += cek('db', t('Basis data') + ' <span class="tag">' + t('{n} posisi ({o} terbuka)', { n: st.positions == null ? '?' : st.positions, o: st.open == null ? '?' : st.open }) + ' · ' + mb(P.db.bytes || 0) + '</span>',
+      t('Riwayat posisi, transaksi, ekuitas, dan riset target. Tanpa ini bot mulai dengan riwayat kosong.'));
+  }
+  if (P.wallet) {
+    h += cek('wallet', t('Wallet') + ' <span class="tag mono">' + esc(P.wallet.address) + '</span>',
+      S.st.existing.privateKeyFromEnv ? t('Kunci sudah diatur lewat <code>LPCOPY_PRIVATE_KEY</code> di .env — bagian ini dilewati.')
+        : t('Keystore terenkripsi; dibuka dengan password yang dipakai saat mencadangkan.'));
+    if (R.parts.wallet && !S.st.existing.privateKeyFromEnv) {
+      h += '<div class="row"><label for="rpw">' + t('Password keystore') + '</label><input id="rpw" type="password" autocomplete="off" value="' + esc(R.password) + '"></div>';
+    }
+  }
+  h += '<div class="two" style="margin-top:1rem">'
+    + '<div class="row"><label for="tok">' + t('Token akses dasbor') + '</label>'
+    + '<input id="tok" class="mono" autocomplete="off" spellcheck="false" value="' + esc(S.secrets.authToken) + '">'
+    + '<p class="hint"><button type="button" class="sm" id="gen">' + t('Buat acak lagi') + '</button> ' + t('Token baru untuk mesin ini, disimpan di .env.') + '</p></div>'
+    + '<div class="row"><label for="port">' + t('Port dasbor') + '</label>'
+    + '<input id="port" inputmode="numeric" value="' + esc(R.port) + '">'
+    + '<p class="hint">' + (R.backupPort && String(R.backupPort) !== String(R.port) ? t('Di instance asal: {p}.', { p: esc(R.backupPort) }) + ' ' : '') + t('Port yang sedang dipakai halaman ini pasti bebas.') + '</p></div>'
+    + '</div>';
+  var kurang = R.envVars.filter(function (v) { return !v.set; });
+  if (kurang.length) {
+    h += '<div class="box"><h3>' + t('Variabel .env yang dirujuk RPC') + '</h3><p class="sub">' + t('URL RPC di config memakai nilai ini dari .env, dan mesin ini belum punya. Boleh dikosongkan — endpoint-nya gagal sampai diisi.') + '</p>';
+    for (var i = 0; i < kurang.length; i++) {
+      var n = kurang[i].name;
+      h += '<div class="row"><label for="env-' + esc(n) + '" class="mono">' + esc(n) + '</label><input id="env-' + esc(n) + '" data-env="' + esc(n) + '" type="password" class="mono" autocomplete="off" value="' + esc(R.env[n] || '') + '"></div>';
+    }
+    h += '</div>';
+  }
+  h += '<p class="warn">' + t('Kalau instance asal masih jalan dengan wallet yang sama, matikan dulu — dua bot di satu wallet saling bertabrakan, dan bot Telegram yang sama hanya bisa dipakai satu instance.') + '</p>';
+  return h;
+}
+
 var PANES = [paneMulai, paneKeamanan, paneWallet, paneChain, paneNotif, paneModal, paneRingkas];
+var PANES_R = [paneMulai, panePulih];
+function panes() { return S.flow === 'restore' ? PANES_R : PANES; }
+function titles() { return S.flow === 'restore' ? TITLES_R : TITLES; }
 
 // ---- kerangka -------------------------------------------------------------
 function render() {
   var d = '';
-  for (var i = 0; i < PANES.length; i++) d += '<i class="' + (i === S.i ? 'now' : i < S.i ? 'done' : '') + '"></i>';
+  var PS = panes();
+  for (var i = 0; i < PS.length; i++) d += '<i class="' + (i === S.i ? 'now' : i < S.i ? 'done' : '') + '"></i>';
   $('#dots').innerHTML = d;
   $('#lang').innerHTML = ['en', 'id'].map(function (l) {
     return '<button type="button" data-lang="' + l + '" aria-pressed="' + (LANG === l) + '">' + l.toUpperCase() + '</button>';
   }).join('');
   $('#kicker').textContent = t('pemasangan');
-  $('#step').textContent = t(TITLES[S.i]) + ' · ' + (S.i + 1) + '/' + PANES.length;
-  $('#body').innerHTML = PANES[S.i]();
+  $('#step').textContent = t(titles()[S.i]) + ' · ' + (S.i + 1) + '/' + PS.length;
+  $('#body').innerHTML = PS[S.i]();
   $('#back').textContent = t('Kembali');
   $('#back').style.visibility = S.i === 0 ? 'hidden' : 'visible';
-  $('#next').textContent = S.i === PANES.length - 1 ? t('Simpan & nyalakan') : t('Lanjut');
+  $('#next').textContent = S.i === PS.length - 1 ? t(S.flow === 'restore' ? 'Pulihkan & nyalakan' : 'Simpan & nyalakan') : t('Lanjut');
   var f = $('#body').querySelector('input:not([type=checkbox]):not([type=radio]),select');
   if (f && S.i > 0) f.focus();
 }
@@ -525,12 +636,18 @@ function wire() {
     else if (id === 'mq') S.capital.max_quote_per_position_usd = el.value.trim();
     else if (id === 'mt') S.capital.max_total_exposure_usd = el.value.trim();
     else if (id === 'db') S.capital.daily_budget_usd = el.value.trim();
+    else if (id === 'rpw') S.r.password = el.value;
+    else if (id === 'port') S.r.port = el.value.trim();
+    else if (el.dataset.env) S.r.env[el.dataset.env] = el.value.trim();
     else if (el.dataset.ta != null) S.targets[+el.dataset.ta].address = el.value.trim();
     else if (el.dataset.tl != null) S.targets[+el.dataset.tl].label = el.value.trim();
   });
   b.addEventListener('change', function (e) {
     var el = e.target;
-    if (el.name === 'wm') { S.wallet.mode = el.value; S.wallet.address = null; render(); }
+    if (el.name === 'flow') { S.flow = el.value; render(); }
+    else if (el.id === 'rf') bacaCadangan(el.files && el.files[0]);
+    else if (el.dataset.part) { S.r.parts[el.dataset.part] = el.checked; render(); }
+    else if (el.name === 'wm') { S.wallet.mode = el.value; S.wallet.address = null; render(); }
     else if (el.name === 'dry') { S.capital.dry_run = el.value === '1'; render(); }
     else if (el.dataset.ch) { S.chains[el.dataset.ch].enabled = el.checked; render(); }
     else if (el.dataset.use) { var p = el.dataset.use.split(':'); S.chains[p[0]].eps[+p[1]].use = el.checked; }
@@ -613,6 +730,15 @@ function periksa() {
     if (!S.code) return 'Tempel kode pemasangan dulu.';
     return null;
   }
+  if (S.flow === 'restore') {
+    var R = S.r;
+    if (!R.backup) return 'Pilih berkas cadangan dulu.';
+    if (!R.backup.parts.config) return 'Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.';
+    if (R.parts.wallet && R.backup.parts.wallet && !S.st.existing.privateKeyFromEnv && !R.password) return 'Isi password keystore, atau hapus centang Wallet.';
+    if (S.secrets.authToken.length < 12) return 'Token akses minimal 12 karakter — ini satu-satunya kunci dasbor.';
+    if (!/^\\d+$/.test(R.port) || +R.port < 1 || +R.port > 65535) return 'Port dasbor harus angka 1–65535.';
+    return null;
+  }
   if (S.i === 1) {
     if (S.secrets.authToken.length < 12) return 'Token akses minimal 12 karakter — ini satu-satunya kunci dasbor.';
     if (S.secrets.publicUrl && !/^https:\\/\\/[^ ]+$/.test(S.secrets.publicUrl)) return 'Alamat dasbor harus diawali https:// (Telegram menolak http).';
@@ -647,7 +773,7 @@ function next() {
   if (err) return say('bad', esc(t(err)));
   say('', '');
   if (S.i === 0 && !S.st) return muat();
-  if (S.i === PANES.length - 1) return simpan();
+  if (S.i === panes().length - 1) return S.flow === 'restore' ? pulihkan() : simpan();
   S.i++;
   render();
 }
@@ -670,6 +796,7 @@ function muat() {
       };
     }
     if (r.wallet) { S.wallet.mode = r.wallet.mode; S.wallet.address = r.wallet.address; }
+    if (!S.r.port) S.r.port = String(r.server.port);
     S.i = 1;
     render();
   }).catch(function (e) { $('#next').disabled = false; say('bad', esc(String(e))); });
@@ -703,6 +830,45 @@ function simpan() {
   }).catch(function (e) { $('#next').disabled = false; $('#back').disabled = false; say('bad', esc(String(e))); });
 }
 
+// Berkas dibaca di peramban (pratinjau tanpa mengunggah); server hanya ditanya bagian
+// config-nya: variabel .env apa yang dirujuk dan belum ada di mesin ini.
+function bacaCadangan(f) {
+  var R = S.r;
+  R.backup = null; R.name = ''; R.size = 0; R.envVars = []; R.backupPort = null;
+  if (!f) return render();
+  f.text().then(function (txt) {
+    var b;
+    try { b = JSON.parse(txt); } catch (e) { throw new Error(t('Berkas cadangan bukan JSON yang valid.')); }
+    if (!b || b.format !== 'quiver-backup' || !b.parts) throw new Error(t('Bukan berkas cadangan Quiver.'));
+    R.backup = b; R.name = f.name; R.size = f.size;
+    R.parts = { db: !!b.parts.db, wallet: !!b.parts.wallet };
+    if (!b.parts.config) { say('bad', esc(t('Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.'))); return render(); }
+    say('', '');
+    return api('restore/inspect', { config: b.parts.config.json }).then(function (r) {
+      if (r.error) return say('bad', esc(ts(r.error)));
+      R.envVars = r.envVars || [];
+      R.backupPort = r.backupPort;
+      render();
+    });
+  }).catch(function (e) { say('bad', esc(e.message || String(e))); render(); });
+}
+
+function pulihkan() {
+  var R = S.r;
+  $('#next').disabled = true;
+  $('#back').disabled = true;
+  say('good', '<span class="spin"></span> ' + t('Memulihkan…'));
+  var env = {};
+  for (var k in R.env) if (R.env[k]) env[k] = R.env[k];
+  api('restore', {
+    backup: R.backup, parts: R.parts, password: R.parts.wallet ? R.password : '',
+    token: S.secrets.authToken, port: +R.port, env: env
+  }).then(function (r) {
+    if (r.error) { $('#next').disabled = false; $('#back').disabled = false; return say('bad', esc(ts(r.error))); }
+    tunggu(r);
+  }).catch(function (e) { $('#next').disabled = false; $('#back').disabled = false; say('bad', esc(String(e))); });
+}
+
 // Server pemasangan mati sesaat setelah berkas ditulis; begitu /api/setup/ping tidak
 // lagi menjawab {setup:true}, yang mendengarkan port itu sudah dasbornya. Alamat
 // tujuan dibangun dari hostname peramban (bukan host di config) supaya tetap benar
@@ -712,7 +878,7 @@ function tunggu(r) {
   var ping = r.samePort ? '/api/setup/ping' : tujuan + 'api/setup/ping';
   var w = r.address ? t(', wallet {a} terpasang', { a: '<span class="mono">' + esc(r.address) + '</span>' }) : '';
   $('#body').innerHTML = '<h2>' + t('Menyalakan Quiver…') + '</h2>'
-    + '<p class="lede">' + t('Berkas sudah ditulis{w}. Mesin tiap chain sedang dipanaskan — halaman ini pindah sendiri ke dasbor begitu siap.', { w: w }) + '</p>'
+    + '<p class="lede">' + t(r.restored ? 'Cadangan sudah dipulihkan{w}. Bot menyala dalam mode simulasi — halaman ini pindah sendiri ke dasbor begitu siap.' : 'Berkas sudah ditulis{w}. Mesin tiap chain sedang dipanaskan — halaman ini pindah sendiri ke dasbor begitu siap.', { w: w }) + '</p>'
     + '<p class="hint" id="tunggu"><span class="spin"></span> ' + t('menunggu dasbor di {u}', { u: esc(tujuan) }) + '</p>';
   $('#next').style.display = 'none';
   $('#back').style.display = 'none';

@@ -27,6 +27,9 @@ const { normalizeCfg, bscTemplate, PRIMARY } = require('./multichain');
 const { probeRpc, maskUrl, hasSecret } = require('./settings');
 const { CURRENCIES, CURRENCIES_EN } = require('./fx');
 const { SETUP_PAGE } = require('./setup-page');
+const { allEndpoints } = require('./env');
+const { parseBackup, stageRestore, applyPendingRestore } = require('./backup');
+const os = require('node:os');
 
 const SETUP_VERSION = 1;
 
@@ -253,6 +256,102 @@ function applySetup({ root, cfgPath, envPath, answers, log = () => {} }) {
   return { cfg, wallet };
 }
 
+// ---- pulihkan dari cadangan ----------------------------------------------
+// Jalan kedua dari wizard: berkas cadangan dari Pengaturan → Cadangan (backup.js)
+// menggantikan semua langkah. Belum ada basis data yang terbuka dan belum ada mesin
+// yang jalan, jadi berkasnya ditulis langsung — tanpa berkas tertunda dan restart.
+
+// ${NAMA} yang dirujuk URL/header RPC di config. Yang belum ada di lingkungan mesin
+// ini ditanyakan wizard; kalau dibiarkan kosong endpoint-nya gagal dan terlihat di
+// Pengaturan → RPC (applyEnv membiarkannya apa adanya).
+function envRefs(cfg) {
+  const out = new Set();
+  const cari = (v) => { for (const m of String(v || '').matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) out.add(m[1]); };
+  for (const e of allEndpoints(cfg)) {
+    cari(e.url);
+    for (const h of Object.values(e.headers || {})) cari(h);
+  }
+  return [...out];
+}
+
+// Jalur absolut dari mesin lain (/home/ubuntu/... di Mac) tidak bisa dipakai di sini:
+// jatuh ke bawaan template. Jalur relatif, ~/…, atau di bawah home/folder ini dipakai.
+function jalurLokal(p, dflt, root) {
+  if (!p) return dflt;
+  const abs = String(p).replace(/^~(?=$|\/)/, os.homedir());
+  if (!path.isAbsolute(abs)) return p;
+  const di = (dir) => abs === dir || abs.startsWith(dir + path.sep);
+  return di(os.homedir()) || di(path.resolve(root)) ? p : dflt;
+}
+
+// Config hasil pulihan: isi cadangan, dengan yang milik MESIN INI dari wizard (port,
+// token lewat .env) atau template (jalur yang tidak ada di sini). Selalu simulasi.
+function restoredConfig({ backup, template, port, root }) {
+  const cfg = JSON.parse(JSON.stringify(backup.parts.config.json));
+  normalizeCfg(cfg);
+  cfg.server = { ...(cfg.server || {}), port, host: cfg.server?.host || template.server?.host || '127.0.0.1' };
+  // Token dasbor ditulis ke .env; token lama di berkas (dari mesin asal) tidak dibawa.
+  cfg.server.auth_token = null;
+  cfg.db = { ...(cfg.db || {}), path: jalurLokal(cfg.db?.path, template.db?.path || 'data/lpcopy.db', root) };
+  cfg.wallet = { ...(cfg.wallet || {}), key_file: jalurLokal(cfg.wallet?.key_file, template.wallet?.key_file || '~/.lpcopy/key', root) };
+  cfg.mode = { ...(cfg.mode || {}), dry_run: true };
+  cfg.setup = { completed_ts: Date.now(), version: SETUP_VERSION, restored_from: backup.createdAt || null };
+  return cfg;
+}
+
+// Urutan sama dengan applySetup: semua yang bisa gagal karena masukan (berkas, password,
+// basis data rusak) diperiksa lebih dulu, config.json ditulis PALING AKHIR.
+async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, password = '', token, port, env = {}, log = () => {} }) {
+  const backup = parseBackup(raw);
+  if (!backup.parts.config) throw new Error('Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.');
+  if (String(token || '').length < 12) throw new Error('Token akses minimal 12 karakter — ini satu-satunya kunci dasbor.');
+  const p = Number(port);
+  if (!Number.isInteger(p) || p < 1 || p > 65535) throw new Error('Port dasbor harus angka 1–65535.');
+  const want = { db: !!parts.db, wallet: !!parts.wallet };
+  for (const k of ['db', 'wallet']) if (want[k] && !backup.parts[k]) throw new Error(`Berkas cadangan tidak berisi bagian ${k}.`);
+
+  const template = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json'), 'utf8'));
+  const cfg = restoredConfig({ backup, template, port: p, root });
+
+  let w = null;
+  if (want.wallet && !process.env.LPCOPY_PRIVATE_KEY) {
+    try { w = await ethers.Wallet.fromEncryptedJson(JSON.stringify(backup.parts.wallet.keystore), String(password)); }
+    catch { throw new Error('Password keystore salah, atau keystore di berkas cadangan rusak.'); }
+  }
+  // Basis data: diperiksa (hash, integritas, tabel) di berkas tertunda dulu, baru dipasang.
+  const dbPath = path.isAbsolute(cfg.db.path) ? cfg.db.path : path.join(root, cfg.db.path);
+  if (want.db) {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    await stageRestore({ backup, parts: { db: true }, cfgPath, dbPath });
+  }
+
+  // Hanya variabel yang memang dirujuk config yang boleh ditulis ke .env lewat sini.
+  const refs = new Set(envRefs(cfg));
+  const vals = { LPCOPY_AUTH_TOKEN: String(token) };
+  for (const [k, v] of Object.entries(env || {})) if (refs.has(k) && String(v || '').trim()) vals[k] = String(v).trim();
+  writeEnvFile({ envPath, examplePath: path.join(root, '.env.example'), vals });
+  for (const [k, v] of Object.entries(vals)) process.env[k] = v;
+  log(`pemulihan: .env ditulis (${envPath})`);
+
+  if (want.db) applyPendingRestore(dbPath, log);
+
+  let wallet = null;
+  if (w) {
+    const kp = keyPathOf(cfg);
+    let sama = false;
+    try { sama = new ethers.Wallet(fs.readFileSync(kp, 'utf8').trim()).address === w.address; } catch { /* belum ada / bukan kunci */ }
+    const bak = sama ? null : writeKeyFile(kp, w.privateKey);
+    wallet = { address: w.address.toLowerCase(), keyFile: kp, backup: bak };
+    log(`pemulihan: wallet ${wallet.address}${sama ? ' (berkas kunci sudah sama)' : ' ditulis'}${bak ? ` — kunci lama dicadangkan: ${path.basename(bak)}` : ''}`);
+  }
+
+  fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(cfgPath, 0o600); } catch { /* abaikan */ }
+  log(`pemulihan: config.json dari cadangan ${backup.createdAt || '?'} ditulis (${cfgPath})${want.db ? ', basis data dipasang' : ''}`);
+  return { cfg, wallet, db: want.db };
+}
+
 // ---- server wizard --------------------------------------------------------
 // Server ini hidup hanya sampai pemasangan selesai, dan hanya melayani halaman
 // wizard + /api/setup/*. Tidak ada rute dasbor di sini: selama belum ada config,
@@ -382,6 +481,32 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
   return new Promise((resolve, reject) => {
     let selesai = null;
     const json = (res, sc, body) => { res.writeHead(sc, { 'content-type': 'application/json; charset=utf-8', ...SEC_HEADERS }); res.end(JSON.stringify(body)); };
+    // Berkas sudah ditulis (pasang baru atau pulihan): jawab, lalu serahkan port ke dasbor.
+    const selesaikan = (res, hasil) => {
+      selesai = hasil;
+      // Port dasbor diambil dari config yang BARU ditulis: kalau pemasangan
+      // dijalankan di port lain (LPCOPY_SETUP_PORT), peramban harus diberi tahu
+      // ke mana pindahnya — kalau tidak, ia menunggu di port yang sudah mati.
+      const portAkhir = Number(hasil.cfg.server?.port || port);
+      json(res, 200, {
+        ok: true,
+        address: hasil.wallet?.address || null,
+        restored: !!hasil.cfg.setup?.restored_from,
+        port: portAkhir,
+        samePort: portAkhir === port,
+        url: bukaUrl(hasil.cfg.server?.host || host, portAkhir),
+      });
+      // Jawaban dulu, baru tutup — port-nya harus bebas sebelum server dasbor
+      // mengikatnya, termasuk koneksi keep-alive yang masih menggantung.
+      setTimeout(() => {
+        server.closeAllConnections?.();
+        server.close(() => {
+          try { fs.unlinkSync(codeFile); } catch { /* sudah hilang */ }
+          log('pemasangan selesai — menyalakan Quiver…');
+          resolve(selesai);
+        });
+      }, 100);
+    };
 
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://x');
@@ -432,6 +557,27 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
           return json(res, 200, { ok: true, ...hasil });
         }
 
+        // Pratinjau berkas cadangan: yang perlu ditanyakan sebelum memulihkan. Cuma
+        // bagian config yang dikirim peramban (basis data bisa puluhan MB).
+        if (key === 'POST /api/setup/restore/inspect') {
+          const b = await readJson(req);
+          const c = b.config && typeof b.config === 'object' ? JSON.parse(JSON.stringify(b.config)) : null;
+          if (!c) return json(res, 200, { error: 'Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.' });
+          normalizeCfg(c);
+          const envVars = envRefs(c).map((name) => ({ name, set: !!process.env[name] }));
+          return json(res, 200, { ok: true, envVars, port, backupPort: c.server?.port ?? null });
+        }
+
+        if (key === 'POST /api/setup/restore') {
+          const b = await readJson(req, 256 * 1024 * 1024);
+          let hasil;
+          try {
+            hasil = await applyRestore({ root, cfgPath, envPath, backup: b.backup, parts: b.parts, password: b.password,
+              token: b.token, port: b.port, env: b.env, log });
+          } catch (e) { return json(res, 200, { error: e.message }); }
+          return selesaikan(res, hasil);
+        }
+
         if (key === 'POST /api/setup/finish') {
           const b = await readJson(req);
           const answers = { ...b };
@@ -448,28 +594,7 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
           let hasil;
           try { hasil = applySetup({ root, cfgPath, envPath, answers, log }); }
           catch (e) { return json(res, 200, { error: e.message }); }
-          selesai = hasil;
-          // Port dasbor diambil dari config yang BARU ditulis: kalau pemasangan
-          // dijalankan di port lain (LPCOPY_SETUP_PORT), peramban harus diberi tahu
-          // ke mana pindahnya — kalau tidak, ia menunggu di port yang sudah mati.
-          const portAkhir = Number(hasil.cfg.server?.port || port);
-          json(res, 200, {
-            ok: true,
-            address: hasil.wallet?.address || null,
-            port: portAkhir,
-            samePort: portAkhir === port,
-            url: bukaUrl(hasil.cfg.server?.host || host, portAkhir),
-          });
-          // Jawaban dulu, baru tutup — port-nya harus bebas sebelum server dasbor
-          // mengikatnya, termasuk koneksi keep-alive yang masih menggantung.
-          return setTimeout(() => {
-            server.closeAllConnections?.();
-            server.close(() => {
-              try { fs.unlinkSync(codeFile); } catch { /* sudah hilang */ }
-              log('pemasangan selesai — menyalakan Quiver…');
-              resolve(selesai);
-            });
-          }, 100);
+          return selesaikan(res, hasil);
         }
 
         if (url.pathname.startsWith('/api/')) return json(res, 404, { error: 'rute tidak ada' });
@@ -508,4 +633,4 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
   });
 }
 
-module.exports = { setupNeeded, pemasanganTerhalang, upsertEnv, writeEnvFile, buildConfig, applySetup, cleanEndpoint, keyPathOf, writeKeyFile, runSetup, SETUP_VERSION };
+module.exports = { setupNeeded, pemasanganTerhalang, upsertEnv, writeEnvFile, buildConfig, applySetup, applyRestore, restoredConfig, envRefs, cleanEndpoint, keyPathOf, writeKeyFile, runSetup, SETUP_VERSION };
