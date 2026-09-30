@@ -26,6 +26,10 @@ const fmtUnits = (raw, dec) => {
 // Asal sebuah sisa, untuk pesan. Antrean jual sekarang juga menampung token yang
 // disapu dari wallet (posId null) — bukan cuma yang keluar dari posisi.
 const asalSisa = (item) => (item.posId == null ? 'sisa di wallet' : `posisi #${item.posId}`);
+// Asal token yang dijual antrean sisa, dicatat di detail tx untuk riwayat Swap:
+// fee hasil klaim, zap yang tidak jadi LP (mint gagal / kelebihan), sapuan wallet,
+// atau hasil menutup posisi.
+const leftoverSource = (item) => (item.kind === 'fee' ? 'fee' : item.source || (item.posId == null ? 'wallet' : 'exit'));
 
 // Kelebihan token zap di bawah nilai ini dibiarkan saja di wallet: satu penjualan
 // memakan gas (~$0,16) dan ruang slippage 1,5% pada zap yang mulus hampir selalu
@@ -1047,7 +1051,7 @@ class Engine {
       const want = needQuoteRaw - have;
       if (nat > 0n) {
         const amt = nat < want ? nat : want;
-        const h = await this.exec.send(this.exec.buildWrapEth(amt), { kind: 'wrap_eth' });
+        const h = await this.exec.send(this.exec.buildWrapEth(amt), { kind: 'wrap_eth', detail: { amountInRaw: String(amt) } });
         if (!(await this.exec.waitReceipt(h)).ok) throw new Error('bungkus ETH gagal');
         notes.push(`bungkus ${(Number(amt) / 1e18).toFixed(5)} ${this.chain.nativeSymbol}`);
         have = await balOf(quoteTok);
@@ -1057,7 +1061,7 @@ class Engine {
       const want = needQuoteRaw - have;
       if (wr > 0n) {
         const amt = wr < want ? wr : want;
-        const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth' });
+        const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth', detail: { amountInRaw: String(amt) } });
         if (!(await this.exec.waitReceipt(h)).ok) throw new Error(`buka bungkus ${this.chain.wethSymbol} gagal`);
         notes.push(`buka bungkus ${(Number(amt) / 1e18).toFixed(5)} ${this.chain.wethSymbol}`);
         have = await balOf(quoteTok);
@@ -1090,7 +1094,7 @@ class Engine {
       const nat = await balOf(this.chain.ADDR.native);
       if (nat >= pay) return;
       const amt = pay - nat;
-      const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth' });
+      const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth', detail: { amountInRaw: String(amt) } });
       if (!(await this.exec.waitReceipt(h)).ok) throw new Error(`buka bungkus ${wethSymbol} gagal`);
       notes.push(`buka bungkus ${fmtUnits(amt, 18)} ${wethSymbol}`);
     };
@@ -1201,13 +1205,14 @@ class Engine {
       await unwrapFor(payRaw);
       const tx = this.exec.buildSwapV4(pool.poolKey, zeroForOne, payRaw, minOut, this.exec.deadline());
       const sim = await this.exec.simulate(tx);
-      if (sim.ok) { pilih = { pool, tx }; break; }
+      if (sim.ok) { pilih = { pool, tx, payRaw }; break; }
       ditolak++; galatTolak = sim.error;
     }
     if (!pilih) {
       throw new Error(`jembatan ${arah} gagal: ${kyberNote}, dan ${ditolak} pool ${nativeSymbol}/${usdgSymbol} langsung menolak swap${galatTolak ? ` (${String(galatTolak).slice(0, 120)})` : ''}`);
     }
-    const h = await this.exec.send(pilih.tx, { kind: 'bridge_swap', detail: { pool: pilih.pool.poolId, wantEth } });
+    const h = await this.exec.send(pilih.tx, { kind: 'bridge_swap', detail: { pool: pilih.pool.poolId, wantEth, payRaw: pilih.payRaw.toString(),
+      tokenIn: wantEth ? this.chain.ADDR.usdg : this.chain.ADDR.native, tokenOut: wantEth ? this.chain.ADDR.native : this.chain.ADDR.usdg } });
     if (!(await this.exec.waitReceipt(h)).ok) throw new Error(`swap jembatan gagal (${h})`);
     notes.push(`jembatan ${arah}`);
     return this.wrapIfWeth(quoteTok, needQuoteRaw, balOf, notes);
@@ -1220,7 +1225,7 @@ class Engine {
       const want = needQuoteRaw - (await balOf(quoteTok));
       const amt = nat < want ? nat : want;
       if (amt > 0n) {
-        const hw = await this.exec.send(this.exec.buildWrapEth(amt), { kind: 'wrap_eth' });
+        const hw = await this.exec.send(this.exec.buildWrapEth(amt), { kind: 'wrap_eth', detail: { amountInRaw: String(amt) } });
         if (!(await this.exec.waitReceipt(hw)).ok) throw new Error('bungkus ETH gagal');
         notes.push(`bungkus ke ${this.chain.wethSymbol}`);
       }
@@ -2554,7 +2559,7 @@ class Engine {
     const ref = await this.sellRef(item, amount);
     const swapOpts = {
       slippageBps: rules.swap.max_slippage_bps, maxLossBps: rules.exit.sell_max_loss_bps,
-      kind: 'sell_leftover', detail: { position: item.posId }, ref, requireLoss: true,
+      kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item) }, ref, requireLoss: true,
     };
     let sold = amount;
     try {
@@ -2666,7 +2671,8 @@ class Engine {
     const pick = await pickSwapPool(ctx, { tokenIn: token, tokenOut: quote, amountIn: amount, minOut,
       maxImpactBps: maxLoss, deadlineSec: this.exec.deadline(), extra, info: {} });
     if (!pick) return null;
-    const h = await this.exec.send(pick.tx, { kind: 'sell_leftover', detail: { position: item.posId, via: pick.pool.pool_ref, dex: `pool ${pick.pool.venue}`, usdOut } });
+    const h = await this.exec.send(pick.tx, { kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item), via: pick.pool.pool_ref, dex: `pool ${pick.pool.venue}`, usdOut,
+      tokenIn: String(token).toLowerCase(), tokenOut: String(quote).toLowerCase(), amountInRaw: amount.toString() } });
     const rc = await this.exec.waitReceipt(h, 90_000);
     if (rc.timeout) throw new Error(`jual lewat pool ${h} belum terkonfirmasi setelah 90 detik`);
     if (!rc.ok) throw new Error(`jual lewat pool gagal (${h})`);
@@ -3121,7 +3127,7 @@ class Engine {
         // Di bawah 1/10 cadangan tidak sepadan dengan gas unwrap-nya sendiri — tanpa batas
         // ini debu WETH memicu satu transaksi sia-sia di setiap entry dan exit.
         if (amt * 10n >= reserve) {
-          const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth' });
+          const h = await this.exec.send(this.exec.buildUnwrapWeth(amt), { kind: 'unwrap_weth', detail: { amountInRaw: String(amt) } });
           if (!(await this.exec.waitReceipt(h)).ok) throw new Error(`tx ${h} gagal`);
           notes.push(`isi gas: buka bungkus ${fmtUnits(amt, 18)} ${this.chain.wethSymbol}`);
           nat += amt;

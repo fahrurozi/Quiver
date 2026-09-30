@@ -21,6 +21,7 @@ const shareCard = require('./share-card');
 const chartCard = require('./chart-card');
 const portfolioCard = require('./portfolio-card');
 const { breakEven } = require('./breakeven.mjs');
+const { swapHistory } = require('./swaplog');
 
 
 // Harga token spekulatif dalam aset kuotasi — salinan rumus web/src/fmt.js, dipakai
@@ -2023,15 +2024,12 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       return { ok: true };
     },
     // Riwayat swap manual terakhir, untuk panel di sebelah kartu swap.
-    'GET /api/manual/swaps': () => ({
-      swaps: store.all("SELECT hash, ts, status, error, detail, gas_used, gas_price FROM txs WHERE chain=? AND kind='swap_manual' ORDER BY ts DESC LIMIT 8", chain.network)
-        .map((r) => {
-          let d = {}; try { d = JSON.parse(r.detail || '{}') || {}; } catch { /* abaikan */ }
-          // Biaya gas dalam USD memakai kurs ETH sekarang — cukup untuk riwayat singkat.
-          const gasUsd = r.gas_used && r.gas_price && engine.ethUsd
-            ? (Number(r.gas_used) * Number(BigInt(r.gas_price))) / 1e18 * engine.ethUsd : null;
-          return { hash: r.hash, ts: r.ts, status: r.status, error: r.error, detail: d, gasUsd };
-        }),
+    // Semua tx yang menukar aset (manual, zap buka LP, jual sisa, jual balik zap yang
+    // gagal jadi LP, jual fee, jembatan, isi gas, WETH) + klaim fee & compound. Lihat swaplog.js.
+    'GET /api/manual/swaps': (req, url) => ({
+      swaps: swapHistory({ store, chain, ethUsd: engine.ethUsd,
+        limit: Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 40)),
+        ...(url.searchParams.get('kinds') ? { kinds: url.searchParams.get('kinds').split(',') } : {}) }),
     }),
     // Saldo untuk langkah "Nominal" — tampil sebelum pratinjau pertama selesai dihitung.
     'GET /api/manual/saldo': async (req, url) => {

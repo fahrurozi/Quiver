@@ -235,7 +235,12 @@ class Kyber {
     const outBal = async () => (await this.exec.balances([tokenOut])).get(String(tokenOut).toLowerCase()) || 0n;
     const before = await outBal();
     const tx = { to: this.router(), data: built.data, value: value.toString(), gasMul: 2 };
-    const hash = await this.exec.send(tx, { kind, detail: { ...(detail || {}), dex: q.dex, usdIn: q.usdIn, usdOut: q.usdOut } });
+    // Token & jumlah masuk dicatat di setiap swap supaya riwayat Swap bisa menulis
+    // "1.200 MEME → 4,1 USDG" untuk zap, jual sisa, jembatan dsb. — bukan cuma nilai USD.
+    const hash = await this.exec.send(tx, { kind, detail: {
+      tokenIn: String(tokenIn).toLowerCase(), tokenOut: String(tokenOut).toLowerCase(), amountInRaw: amountIn.toString(),
+      ...(detail || {}), dex: q.dex, usdIn: q.usdIn, usdOut: q.usdOut,
+    } });
     const rc = await this.exec.waitReceipt(hash, 90_000);
     if (rc.timeout) {
       const e = new Error(`swap Kyber ${hash} belum terkonfirmasi setelah 90 detik`);

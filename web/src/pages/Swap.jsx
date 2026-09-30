@@ -311,14 +311,39 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
   );
 }
 
-// Swap manual terakhir, dari tabel txs. Baris lama (sebelum token & jumlah ikut
-// dicatat) hanya punya nilai USD-nya.
+// Riwayat semua tx yang menukar aset, dari tabel txs (lihat src/swaplog.js): swap
+// manual, zap saat membuka LP, jual sisa saat menutup, jual balik token zap yang
+// tidak jadi LP, jual fee, jembatan, isi gas, WETH — plus klaim fee & compound.
+// Baris lama (sebelum token & jumlah ikut dicatat) hanya punya nilai USD-nya.
 const STATUS_ICON = { sukses: CircleCheck, pending: Clock, gagal: CircleX };
 // Nama DEX dari Kyber datang mentah ("uniswapv3", "uniswap-v4"); rapikan yang dikenal saja.
 const dexName = (s) => String(s).replace(/^uniswap-?v(\d)$/i, 'Uniswap v$1').replace(/^kyberswap.*/i, 'KyberSwap');
 const STATUS_CLS = {
   sukses: 'bg-success/10 text-success', pending: 'bg-warning/10 text-warning', gagal: 'bg-danger/10 text-danger',
 };
+// Dari mana swap itu datang: [label, penjelasan, warna lencana].
+const METODE = {
+  manual: ['Manual', 'Dikirim dari halaman ini atau bot Telegram', 'bg-accent/10 text-accent'],
+  zap: ['Buka LP', 'Zap: membeli sisi token supaya posisi LP bisa dibuka', 'bg-success/10 text-success'],
+  exit: ['Tutup LP', 'Menjual token sisa hasil menutup posisi', 'bg-warning/10 text-warning'],
+  unwind: ['Jual balik', 'Token zap yang tidak jadi LP (mint gagal atau kelebihan) dijual kembali', 'bg-danger/10 text-danger'],
+  fee_sell: ['Jual fee', 'Menjual sisi memecoin dari fee yang diklaim', 'bg-success/10 text-success'],
+  sweep: ['Sapu wallet', 'Token yang tertinggal di wallet dijual', 'bg-default text-muted'],
+  leftover: ['Jual sisa', 'Token sisa di wallet (zap tanpa LP atau sapuan)', 'bg-default text-muted'],
+  bridge: ['Jembatan', 'Menukar ETH ⇄ stablecoin supaya entry punya aset yang dibutuhkan', 'bg-default text-muted'],
+  gas: ['Isi gas', 'Membeli ETH untuk gas dari stablecoin', 'bg-default text-muted'],
+  wrap: ['Bungkus ETH', 'ETH → WETH', 'bg-default text-muted'],
+  unwrap: ['Buka WETH', 'WETH → ETH', 'bg-default text-muted'],
+  claim: ['Klaim fee', 'Fee posisi LP ditarik ke wallet', 'bg-success/10 text-success'],
+  compound: ['Compound', 'Fee disetor kembali ke posisi', 'bg-success/10 text-success'],
+};
+const FILTER = [
+  ['', 'Semua'],
+  ['swap_manual', 'Manual'],
+  ['zap_swap,sell_leftover', 'Posisi LP'],
+  ['claim_fees,compound', 'Fee'],
+  ['bridge_swap,gas_topup,wrap_eth,unwrap_weth', 'Lainnya'],
+];
 
 function SwapRow({ x }) {
   const { t } = useI18n();
@@ -326,15 +351,29 @@ function SwapRow({ x }) {
   const st = TXSTATUS[x.status];
   const Ikon = STATUS_ICON[x.status] || Clock;
   const cls = STATUS_CLS[x.status] || 'bg-default text-muted';
+  const m = METODE[x.method];
+  const c = x.claim;
   // Selisih nilai: berapa persen yang hilang (atau didapat) antara nilai masuk dan keluar.
   const selisih = d.usdIn > 0 && d.usdOut != null ? ((d.usdOut - d.usdIn) / d.usdIn) * 100 : null;
   const meta = [
+    m && (
+      <span key="m" title={t(m[1])} className={`rounded px-1.5 py-px text-[0.6875rem] font-medium ${m[2]}`}>{t(m[0])}</span>
+    ),
+    x.position != null && (
+      <a key="pos" href={'#positions/' + x.position} className="num hover:text-foreground hover:underline">
+        #{x.position}{x.pair ? ` ${x.pair}` : ''}
+      </a>
+    ),
     (d.usdIn != null && d.usdOut != null) ? <span key="usd" className="num">{usd(d.usdIn)} → {usd(d.usdOut)}</span>
       : (d.usdIn ?? d.usdOut) != null && <span key="usd" className="num">≈ {usd(d.usdIn ?? d.usdOut)}</span>,
     selisih != null && Math.abs(selisih) >= 0.05 && (
       <span key="pct" className={`num ${selisih < -1 ? 'text-danger' : selisih > 0 ? 'text-success' : ''}`}>{pct(selisih, 2)}</span>
     ),
-    d.dex && <span key="dex" className="truncate">{t('lewat {d}', { d: dexName(d.dex) })}</span>,
+  ].filter(Boolean);
+  // Baris kedua: lewat mana swap-nya dan ongkos gasnya.
+  const rute = [
+    x.route === 'pool' && <span key="rt">{t('pool langsung')}</span>,
+    x.route === 'kyber' && <span key="rt" className="truncate">{d.dex ? t('Kyber lewat {d}', { d: dexName(d.dex) }) : 'Kyber'}</span>,
     x.gasUsd != null && <span key="gas" className="num">{t('gas {v}', { v: usd(x.gasUsd, x.gasUsd < 0.01 ? 4 : 2) })}</span>,
   ].filter(Boolean);
   const Chip = () => (
@@ -343,31 +382,52 @@ function SwapRow({ x }) {
     </span>
   );
 
+  let judul;
+  if (c) {
+    // Klaim fee: dua sisi pool yang ditarik, bukan pertukaran.
+    const sisi = [[c.amount0, c.token0, c.symbol0], [c.amount1, c.token1, c.symbol1]].filter(([a]) => a == null || a > 0);
+    judul = (
+      <>
+        {sisi.map(([a, tok, s], i) => (
+          <span key={tok} className="whitespace-nowrap">
+            {i > 0 && <span className="text-muted">+ </span>}
+            {a != null && <><span className="num">{num(a, 6)}</span> </>}<TokenSym address={tok} symbol={s} />
+          </span>
+        ))}
+      </>
+    );
+  } else if (x.kind === 'compound') {
+    judul = <span>{t('Compound fee ke posisi')}</span>;
+  } else if (d.symbolIn) {
+    judul = (
+      <>
+        <span className="whitespace-nowrap">{d.amountIn != null && <><span className="num">{num(d.amountIn, 6)}</span> </>}<TokenSym address={d.tokenIn} symbol={d.symbolIn} /></span>
+        <ArrowRight className="size-3.5 shrink-0 text-muted" />
+        <span className="whitespace-nowrap">
+          {d.amountOut > 0 ? <><span className="num">{num(d.amountOut, 6)}</span> </> : null}<TokenSym address={d.tokenOut} symbol={d.symbolOut} />
+        </span>
+      </>
+    );
+  } else judul = <span className="num">{d.usdIn != null || d.usdOut != null ? `${usd(d.usdIn)} → ${usd(d.usdOut)}` : t('Swap')}</span>;
+
+  const iconA = c ? c.token0 : d.tokenIn, iconB = c ? c.token1 : d.tokenOut;
   return (
     <div className="flex items-start gap-3 px-4 py-3 text-sm">
       {/* pasangan lambang: token dijual di depan, token diterima menyusul di belakangnya */}
       <span className="mt-0.5 flex shrink-0 items-center">
-        <TokenIcon address={d.tokenIn} symbol={d.symbolIn} size={28} />
-        <TokenIcon address={d.tokenOut} symbol={d.symbolOut} size={28} className="-ml-2" />
+        <TokenIcon address={iconA} symbol={c ? c.symbol0 : d.symbolIn} size={28} />
+        <TokenIcon address={iconB} symbol={c ? c.symbol1 : d.symbolOut} size={28} className="-ml-2" />
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">
-          {d.symbolIn ? (
-            <>
-              <span className="whitespace-nowrap"><span className="num">{num(d.amountIn, 6)}</span> <TokenSym address={d.tokenIn} symbol={d.symbolIn} /></span>
-              <ArrowRight className="size-3.5 shrink-0 text-muted" />
-              <span className="whitespace-nowrap">
-                {d.amountOut > 0 ? <><span className="num">{num(d.amountOut, 6)}</span> </> : null}<TokenSym address={d.tokenOut} symbol={d.symbolOut} />
-              </span>
-            </>
-          ) : <span className="num">{usd(d.usdIn)} → {usd(d.usdOut)}</span>}
-        </div>
-        {meta.length > 0 && (
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-            {meta.map((m, i) => <span key={m.key} className="flex items-center gap-1.5">{i > 0 && <span aria-hidden="true">·</span>}{m}</span>)}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">{judul}</div>
+        {[meta, rute].map((baris, j) => baris.length > 0 && (
+          <div key={j} className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted">
+            {/* titik pemisah menempel di KANAN tiap butir kecuali terakhir: kalau barisnya
+                patah, tidak ada titik yatim di awal baris baru */}
+            {baris.map((el, i) => <span key={el.key} className="flex min-w-0 items-center gap-1.5">{el}{i < baris.length - 1 && <span aria-hidden="true">·</span>}</span>)}
           </div>
-        )}
+        ))}
         {x.status === 'gagal' && x.error && (
           <div className="mt-1 flex items-start gap-1 text-xs text-danger">
             <TriangleAlert className="mt-px size-3 shrink-0" /><span className="line-clamp-2 break-words">{x.error}</span>
@@ -391,29 +451,33 @@ function SwapRow({ x }) {
 
 function Riwayat() {
   const { t } = useI18n();
-  const { data, loading } = usePoll('/api/manual/swaps', 15000);
+  const [jenis, setJenis] = useState('');
+  const { data, loading } = usePoll(`/api/manual/swaps?limit=30${jenis ? `&kinds=${jenis}` : ''}`, 15000);
   const list = data?.swaps || [];
-  const ringkas = list.reduce((a, x) => {
-    if (x.status === 'sukses') a.n += 1;
-    const v = x.detail?.usdIn ?? x.detail?.usdOut;
-    if (x.status === 'sukses' && v != null) a.usd += v;
-    return a;
-  }, { n: 0, usd: 0 });
+  const ringkas = list.reduce((a, x) => (x.status === 'sukses' ? a + 1 : a), 0);
   return (
-    <Panel title="Swap terakhir" desc="Dari halaman ini maupun bot Telegram."
-      action={list.length ? (
+    <Panel title="Riwayat swap" desc="Swap manual, zap & jual sisa posisi LP, klaim fee, jembatan dan isi gas."
+      action={(
         <span className="flex items-center gap-2 text-xs text-muted">
           <Refreshing loading={loading} />
-          <span className="num">{t('{n} sukses', { n: ringkas.n })}</span>
-          {ringkas.usd > 0 && <><span aria-hidden="true">·</span><span className="num font-medium text-foreground">{usd(ringkas.usd)}</span></>}
+          {list.length > 0 && <span className="num">{t('{n} sukses', { n: ringkas })}</span>}
           <a href="#activity" className="inline-flex items-center gap-1 text-accent hover:underline">{t('Semua')}<ChevronRight className="size-3" /></a>
         </span>
-      ) : null} bodyClass="p-0">
+      )} bodyClass="p-0">
+      <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2.5" role="tablist" aria-label={t('Jenis swap')}>
+        {FILTER.map(([k, label]) => (
+          <button key={k || 'semua'} type="button" role="tab" aria-selected={jenis === k} onClick={() => setJenis(k)}
+            className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${jenis === k
+              ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted hover:text-foreground'}`}>
+            {t(label)}
+          </button>
+        ))}
+      </div>
       {list.length ? (
-        <div className="divide-y divide-border">
+        <div className="max-h-[36rem] divide-y divide-border overflow-y-auto">
           {list.map((x) => <SwapRow key={x.hash} x={x} />)}
         </div>
-      ) : <div className="p-4"><Empty title="Belum ada swap" sub="Swap yang dikirim dari halaman ini atau bot Telegram muncul di sini." /></div>}
+      ) : <div className="p-4"><Empty title="Belum ada swap" sub="Swap dari halaman ini, bot Telegram, dan posisi LP muncul di sini." /></div>}
     </Panel>
   );
 }
