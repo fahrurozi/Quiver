@@ -1,18 +1,18 @@
 'use strict';
 const { ensureChain } = require('./networks');
-// Rute halaman Pengaturan: wallet bot, endpoint RPC (termasuk yang memakai API key),
-// gas, notifikasi, mesin, dan token akses dasbor.
+// Settings page routes: the bot wallet, RPC endpoints (including ones using an API key),
+// gas, notifications, engine, and the dashboard access token.
 //
-// Aturan keamanan yang dipegang di sini:
-//  - Kunci privat mentah TIDAK PERNAH dikirim balik ke browser — hanya alamatnya, atau
-//    (lewat /wallet/export, digembok token dashboard yang diketik ulang) keystore V3
-//    terenkripsi password yang diisi saat itu juga, tidak pernah disimpan di server.
-//  - Kunci lama tidak pernah dihapus diam-diam: dipindah ke berkas cadangan bertanggal.
-//  - URL/header RPC yang mengandung API key selalu disamarkan di respons; untuk
-//    endpoint yang tidak diubah, browser cukup mengirim id-nya dan rahasianya tetap
-//    di server.
-//  - Wallet tidak bisa diganti selagi mode LIVE — mengganti kunci di tengah eksekusi
-//    bisa meninggalkan posisi yang tidak tercatat.
+// Security rules held here:
+//  - The raw private key is NEVER sent back to the browser — only its address, or
+//    (via /wallet/export, locked by the dashboard token retyped) a password-encrypted V3
+//    keystore filled in right then, never stored on the server.
+//  - An old key is never silently deleted: it is moved to a dated backup file.
+//  - RPC URLs/headers containing an API key are always masked in responses; for
+//    an unchanged endpoint, the browser only sends its id and the secret stays
+//    on the server.
+//  - The wallet cannot be changed while in LIVE mode — swapping the key in the middle of execution
+//    can leave an unrecorded position.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -27,11 +27,11 @@ const { createBackup, parseBackup, stageRestore } = require('./backup');
 
 const MASK = '••••';
 
-// Penjaga SSRF untuk URL RPC yang diketik pengguna. URL RPC sah boleh menunjuk
-// node yang di-host sendiri di loopback/jaringan privat, jadi keduanya DIBIARKAN;
-// yang ditutup adalah rentang link-local (169.254.0.0/16 & fe80::/10) tempat layanan
-// metadata cloud tinggal — target SSRF paling berharga. Layanan metadata sendiri
-// hanya melayani HTTP, dan URL RPC wajib https, jadi ini lapis pertahanan tambahan.
+// SSRF guard for RPC URLs typed by the user. A legitimate RPC URL may point at
+// a self-hosted node on loopback/a private network, so both are ALLOWED;
+// what is closed off is the link-local range (169.254.0.0/16 & fe80::/10) where cloud
+// metadata services live — the most valuable SSRF target. The metadata service itself
+// only serves HTTP, and RPC URLs must be https, so this is an extra layer of defence.
 function isLinkLocal(ip) {
   const v = net.isIP(ip);
   if (v === 4) return ip.startsWith('169.254.');
@@ -41,18 +41,18 @@ function isLinkLocal(ip) {
 async function assertSafeRpcUrl(rawUrl) {
   let host;
   try { host = new URL(rawUrl).hostname.replace(/^\[|\]$/g, ''); } catch { throw new Error('URL tidak valid'); }
-  // Nama host metadata cloud yang lazim — tutup lebih dulu sebelum resolusi DNS.
+  // Common cloud metadata host names — block first before DNS resolution.
   if (/(^|\.)metadata\.(google|goog)\b/i.test(host) || host === 'metadata') throw new Error('host tidak diizinkan');
   if (net.isIP(host)) { if (isLinkLocal(host)) throw new Error('alamat link-local tidak diizinkan'); return; }
   let addrs = [];
-  try { addrs = await dns.lookup(host, { all: true }); } catch { return; } // resolusi gagal: biarkan pemanggil yang menangani
+  try { addrs = await dns.lookup(host, { all: true }); } catch { return; } // resolution failed: let the caller handle it
   if (addrs.some((a) => isLinkLocal(a.address))) throw new Error('host mengarah ke alamat link-local');
 }
 
 function maskUrl(u) {
   try {
     const url = new URL(u);
-    // segmen path yang tampak seperti kunci (panjang & acak) disamarkan
+    // path segments that look like a key (long & random) are masked
     url.pathname = url.pathname.split('/').map((seg) =>
       (seg.length >= 16 && /^[A-Za-z0-9_\-]+$/.test(seg) ? seg.slice(0, 4) + MASK : seg)).join('/');
     for (const [k, v] of url.searchParams) if (v) url.searchParams.set(k, v.slice(0, 3) + MASK);
@@ -75,8 +75,8 @@ function maskHeaders(h) {
   return out;
 }
 
-// Menguji sebuah endpoint dan menyarankan bendera yang cocok untuknya. `chain` =
-// profil chain yang diharapkan (pools.js Chain): chain id, alamat kontrak untuk uji.
+// Test an endpoint and suggest the flags that fit it. `chain` =
+// the expected chain profile (pools.js Chain): chain id, contract addresses for the test.
 async function probeRpc({ url, headers }, chain) {
   chain = ensureChain(chain);
   const { ADDR, CHAIN_ID } = chain;
@@ -97,7 +97,7 @@ async function probeRpc({ url, headers }, chain) {
   const head = out.block.v;
   out.call = await t(() => pool.ethCall(ADDR.posmV4, '0x95d89b41'));
   out.logsSmall = await t(() => pool.call('eth_getLogs', [{ address: ADDR.poolManager, topics: [TOPIC.modifyLiquidity], fromBlock: hex(head - 1000), toBlock: hex(head) }], { timeoutMs: 20_000 }));
-  // query terfilter alamat pada rentang besar — pola yang dipakai riset wallet
+  // an address-filtered query over a large range — the pattern used by wallet research
   const pad = '0x' + '0'.repeat(24) + ADDR.usdg.slice(2);
   out.logsLarge = await t(() => pool.call('eth_getLogs', [{ address: ADDR.posmV4, topics: [TOPIC.transfer, null, pad], fromBlock: hex(head - 900_000), toBlock: hex(head) }], { timeoutMs: 20_000 }));
   const slot = '0x' + '0'.repeat(63) + '6';
@@ -115,18 +115,18 @@ async function probeRpc({ url, headers }, chain) {
   return { ...out, usable: out.call.ok, suggest, summary: parts.join(' · ') };
 }
 
-// `engines`: semua mesin di proses ini (wallet yang sama dipakai semua chain — ganti
-// kunci harus me-reset dompet tiap mesin). `chain` = profil chain tampilan ini.
-// `restart`: dipanggil sesudah pemulihan config/basis data. Bawaannya jalur berhenti
-// tertib index.js (SIGINT) — pm2/systemd menyalakannya lagi dan boot menukar berkasnya.
+// `engines`: all engines in this process (the same wallet is used by all chains — changing
+// the key must reset each engine's wallet). `chain` = the chain profile of this view.
+// `restart`: called after a config/database restore. Defaults to the orderly-stop path
+// of index.js (SIGINT) — pm2/systemd starts it again and boot swaps the files.
 function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath, rpc, chain, log, readBody, telegram, sessionCookie, market = null, fx = null,
   restart = () => process.kill(process.pid, 'SIGINT') }) {
   chain = ensureChain(chain || engine?.chain);
-  // Lewat writeCfg: nilai dari .env tidak boleh ikut tertulis ke config.json.
+  // Via writeCfg: values from .env must not get written to config.json.
   const saveCfg = () => writeCfg(cfgPath, cfg);
   const resetWallets = () => { for (const e of engines) e.exec.resetWallet(); };
-  // Kolom yang diatur .env akan ditimpa lagi saat restart — mengubahnya dari dasbor
-  // cuma menipu, jadi ditolak dengan petunjuk di mana mengubahnya.
+  // Fields governed by .env would be overwritten again on restart — changing them from the dashboard
+  // would just mislead, so it is refused with a hint of where to change them.
   const lockedByEnv = (dotted) => {
     const n = envName(cfg, dotted);
     return n ? { error: `Diatur lewat ${n} di .env — ubah di berkas itu lalu restart.` } : null;
@@ -153,16 +153,16 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
   };
   const refuseIfLive = () => {
     if (privateKeyFromEnv()) return { error: 'Kunci wallet diatur lewat LPCOPY_PRIVATE_KEY di .env — ganti atau hapus di berkas itu lalu restart.' };
-    // Kunci diganti di tengah entry/keluar/penjualan: transaksi berikutnya (mint, jual token
-    // zap) ditandatangani wallet LAIN yang tidak memegang tokennya.
-    // (Mode LIVE sudah wajib mati, tapi entry yang dimulai sebelum mode dimatikan tetap
-    // berjalan sampai selesai.)
+    // The key is changed in the middle of an entry/exit/sale: the next transaction (mint, sale of the zap
+    // token) is signed by ANOTHER wallet that does not hold the token.
+    // (LIVE mode is already required to be off, but an entry started before the mode was switched off still
+    // runs to completion.)
     if ((engine.activeEntries || 0) > 0 || engine.exiting?.size > 0 || engine.selling?.size > 0 || engine.compound?.running) return { error: 'Bot sedang memproses transaksi (masuk/keluar/jual sisa) — tunggu sampai selesai, lalu coba lagi.' };
     return !engine.dryRun() ? { error: 'Matikan mode LIVE dulu sebelum mengganti wallet.' } : null;
   };
 
-  // Token dashboard yang DIKETIK ULANG, bukan cookie sesi: cookie HttpOnly tidak bisa
-  // dibaca lewat XSS, jadi ini lapis kedua yang nyata untuk aksi yang membawa rahasia keluar.
+  // The dashboard token RETYPED, not a session cookie: an HttpOnly cookie cannot be
+  // read via XSS, so this is a real second layer for actions that carry secrets out.
   const retypedToken = (b, noToken) => {
     const TOKEN = cfg.server?.auth_token || null;
     if (!TOKEN) return { error: noToken };
@@ -171,7 +171,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     if (supplied.length !== real.length || !crypto.timingSafeEqual(supplied, real)) return { error: 'Token salah.' };
     return null;
   };
-  // Berkas cadangan berisi basis data (bisa beberapa MB) — melewati batas 1 MB readBody.
+  // A backup file contains the database (can be several MB) — it passes the 1 MB readBody limit.
   const readBackupBody = (req) => (req.__body ? Promise.resolve(req.__body) : new Promise((resolve, reject) => {
     const chunks = []; let n = 0;
     req.on('data', (c) => { n += c.length; if (n > 256 * 1024 * 1024) { req.destroy(); reject(new Error('Berkas cadangan terlalu besar.')); } else chunks.push(c); });
@@ -182,9 +182,9 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     ? { error: 'Bot sedang memproses transaksi (masuk/keluar/jual sisa) — tunggu sampai selesai, lalu coba lagi.' } : null);
 
   const rpcView = () => {
-    // Urutan rpc.eps selalu sama dengan cfg.chain.endpoints (dibuat dari daftar yang
-    // sama), jadi dicocokkan per indeks — mencocokkan per URL salah kalau dua endpoint
-    // memakai URL yang sama dengan header berbeda.
+    // The order of rpc.eps is always the same as cfg.chain.endpoints (built from the same
+    // list), so they are matched by index — matching by URL is wrong if two endpoints
+    // use the same URL with different headers.
     const all = rpc.stats();
     return (cfg.chain.endpoints || []).map((e, id) => {
       const st = all[id] && all[id].url === e.url ? all[id] : {};
@@ -198,8 +198,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     });
   };
 
-  // Token bot Telegram = kendali penuh atas bot itu; ia tidak pernah dikirim utuh
-  // ke peramban, sama seperti kunci privat dan API key RPC.
+  // A Telegram bot token = full control of that bot; it is never sent whole
+  // to the browser, the same as the private key and RPC API keys.
   const tgView = () => {
     const t = cfg.telegram || {};
     const pair = telegram?.pairCode && Date.now() < telegram.pairCode.exp
@@ -216,8 +216,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     };
   };
 
-  // API key GMGN = akses OpenAPI atas nama akun itu; seperti token Telegram, tidak
-  // pernah dikirim utuh ke peramban.
+  // A GMGN API key = OpenAPI access on behalf of that account; like the Telegram token, it is
+  // never sent whole to the browser.
   const gmgnView = () => {
     const k = cfg.gmgn?.api_key || '';
     return { hasKey: !!k, fromEnv: envName(cfg, 'gmgn.api_key'), key: k ? `${String(k).slice(0, 6)}${MASK}` : '' };
@@ -229,8 +229,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     return n;
   };
 
-  // Sama seperti GET /api/overview: kas + posisi + sisa + fee belum diklaim. Dipakai
-  // di kartu status breaker drawdown supaya angkanya konsisten dengan Ringkasan.
+  // The same as GET /api/overview: cash + positions + leftovers + unclaimed fees. Used
+  // in the drawdown breaker status card so its figure is consistent with the Summary.
   const equityNow = async () => {
     const cash = await engine.freshCash();
     const s = engine.positions.summary(engine.ethUsd);
@@ -264,7 +264,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         wallet: {
           address: addr, keyFile: cfg.wallet?.key_file || '~/.lpcopy/key',
           hasKey: privateKeyFromEnv() || fs.existsSync(p), perms, balances, backups,
-          // Kunci dari .env mengalahkan berkas kunci; tombol ganti/lepas tidak berlaku.
+          // A key from .env beats the key file; the replace/detach buttons do not apply.
           fromEnv: privateKeyFromEnv() ? 'LPCOPY_PRIVATE_KEY' : null,
         },
         mode: { dry_run: engine.dryRun(), paused: engine.paused() },
@@ -273,8 +273,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
           status: { ...engine.drawdownStatus(), equityUsd: await equityNow() },
         },
         rpc: rpcView(),
-        // Cache jawaban RPC yang sudah pasti — ditampilkan di bawah daftar endpoint
-        // supaya terlihat berapa panggilan yang tidak perlu dikirim sama sekali.
+        // The RPC answer cache that is already final — displayed under the endpoint list
+        // so it is visible how many unnecessary calls were not sent at all.
         rpcCache: rpc.cacheStats ? rpc.cacheStats() : null,
         gas: {
           price_multiplier: cfg.gas?.price_multiplier ?? 1.5,
@@ -308,7 +308,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       if (fs.existsSync(exec.keyPath()) && !b.replace) return { error: 'Sudah ada kunci. Centang "ganti kunci yang ada" untuk menggantinya (kunci lama dicadangkan).' };
       const w = ethers.Wallet.createRandom();
       const res = writeKey(w.privateKey);
-      // frasa pemulihan disimpan di server berdampingan dengan kunci, tidak dikirim ke browser
+      // the recovery phrase is stored on the server beside the key, not sent to the browser
       fs.writeFileSync(exec.keyPath() + '.mnemonic', w.mnemonic.phrase, { mode: 0o600 });
       return { ok: true, ...res, mnemonicFile: path.basename(exec.keyPath()) + '.mnemonic' };
     },
@@ -335,11 +335,11 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return { ok: true, backup: bak ? path.basename(bak) : null };
     },
 
-    // Ekspor wallet sebagai keystore V3 terenkripsi (format sama dengan geth/MetaMask),
-    // bukan kunci privat mentah — walau responsnya kesadap atau nyangkut di cache/log,
-    // isinya tak berguna tanpa password yang diketik saat itu juga (tidak disimpan).
-    // Digembok token dashboard yang diketik ulang: cookie sesi HttpOnly tidak bisa
-    // dibaca lewat XSS, jadi ini lapis kedua yang nyata, bukan formalitas.
+    // Export the wallet as an encrypted V3 keystore (the same format as geth/MetaMask),
+    // not the raw private key — even if the response is eavesdropped or stuck in a cache/log,
+    // its contents are useless without the password typed right then (not stored).
+    // Locked by the dashboard token retyped: an HttpOnly session cookie cannot be
+    // read via XSS, so this is a real second layer, not a formality.
     'POST /api/settings/wallet/export': async (req) => {
       const b = await readBody(req);
       const bad = retypedToken(b, 'Setel token dashboard dulu di tab Keamanan sebelum bisa mengekspor wallet.'); if (bad) return bad;
@@ -354,7 +354,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return { ok: true, address: addr, keystore: JSON.parse(keystore) };
     },
 
-    // ---- cadangan & pemulihan (lihat backup.js) ----
+    // ---- backup & restore (see backup.js) ----
     'POST /api/settings/backup': async (req) => {
       const b = await readBody(req);
       const bad = retypedToken(b, 'Setel token dashboard dulu di tab Keamanan sebelum bisa membuat cadangan.'); if (bad) return bad;
@@ -381,9 +381,9 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         return { ok: true, backup };
       } catch (e) { return { error: `Gagal membuat cadangan: ${e.message}` }; }
     },
-    // Pemulihan: wallet langsung dipasang; config & basis data ditaruh sebagai berkas
-    // tertunda lalu bot dinyalakan ulang (lewat jalur berhenti tertib) supaya ditukar saat
-    // boot. Wajib mode simulasi — basis data lama tidak tahu posisi yang dibuka sesudahnya.
+    // Restore: the wallet is installed right away; config & database are put aside as a
+    // pending file then the bot is restarted (via the orderly-stop path) so they are swapped at
+    // boot. Simulation mode is required — the old database does not know about positions opened after it.
     'POST /api/settings/restore': async (req) => {
       let b;
       try { b = await readBackupBody(req); } catch (e) { return { error: e.message }; }
@@ -398,8 +398,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       const dbPath = cfg.db?.path;
       if (parts.db && !dbPath) return { error: 'Lokasi basis data tidak diketahui.' };
 
-      // Wallet dulu: satu-satunya bagian yang bisa gagal karena masukan (password salah),
-      // dan kegagalannya tidak boleh meninggalkan config/db tertunda yang setengah jadi.
+      // Wallet first: the only part that can fail because of input (a wrong password),
+      // and its failure must not leave a half-finished pending config/db.
       let walletRes = null;
       if (parts.wallet) {
         const live = refuseIfLive(); if (live) return live;
@@ -430,7 +430,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return { ok: true, dry_run: cfg.mode.dry_run };
     },
 
-    // ---- risiko ----
+    // ---- risk ----
     'POST /api/settings/risk': async (req) => {
       const b = await readBody(req);
       try {
@@ -445,7 +445,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     'POST /api/settings/rpc/test': async (req) => {
       const b = await readBody(req);
       let url = b.url, headers = b.headers || null;
-      if (b.id != null && !url) {                     // uji endpoint yang sudah tersimpan
+      if (b.id != null && !url) {                     // test an already-stored endpoint
         const e = cfg.chain.endpoints[Number(b.id)];
         if (!e) return { error: 'endpoint tidak ada' };
         url = e.url; headers = e.headers || null;
@@ -463,10 +463,10 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         const base = e.id != null && cur[Number(e.id)] ? cur[Number(e.id)] : null;
         const url = e.url ? String(e.url).trim() : base?.url;
         if (!/^https:\/\/.+/i.test(url || '')) return { error: `URL tidak valid: ${e.url || '(kosong)'}` };
-        // Endpoint yang tak diubah (kirim id saja, tanpa url) tak perlu dicek ulang.
+        // An unchanged endpoint (only the id sent, without url) does not need re-checking.
         if (e.url) { try { await assertSafeRpcUrl(url); } catch (err) { return { error: `URL ditolak: ${err.message}` }; } }
         let headers = base?.headers || null;
-        if (e.headers === null) headers = null;                       // dihapus
+        if (e.headers === null) headers = null;                       // removed
         else if (e.headers && typeof e.headers === 'object') headers = Object.keys(e.headers).length ? e.headers : null;
         const out = { url, max_batch: num(e.max_batch ?? base?.max_batch ?? 40, 1, 200, 'max_batch') };
         if (headers) out.headers = headers;
@@ -476,9 +476,9 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         if (base?.catatan && !e.url) out.catatan = base.catatan;
         next.push(out);
       }
-      // Riset wallet butuh getLogs rentang besar. Di chain yang endpoint publiknya
-      // semua membatasi rentang (BSC), ini peringatan — pemindaian tetap jalan per
-      // potongan, hanya lebih lambat.
+      // Wallet research needs getLogs over a large range. On a chain whose public endpoints
+      // all limit the range (BSC), this is a warning — scanning still runs in
+      // chunks, only slower.
       const warning = next.some((e) => !e.no_logs && !e.max_log_blocks) ? null
         : 'Tidak ada endpoint yang sanggup getLogs rentang besar (tanpa batas blok) — riset wallet akan berjalan per potongan dan lebih lambat.';
       cfg.chain.endpoints = next;
@@ -488,7 +488,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return { ok: true, rpc: rpcView(), warning };
     },
 
-    // ---- gas / notifikasi / mesin ----
+    // ---- gas / notifications / engine ----
     'POST /api/settings/gas': async (req) => {
       const b = await readBody(req);
       try {
@@ -519,11 +519,11 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         .then((x) => x.status).catch((e) => e.message);
       return r === 200 ? { ok: true } : { error: `ntfy membalas ${r}` };
     },
-    // ---- tampilan: mata uang kedua ----
-    // Hanya keterangan di dasbor. Mesin, batas anggaran, dan semua perhitungan tetap
-    // dalam dolar — mengganti pilihan di sini tidak menyentuh satu pun keputusan bot.
-    // Sebagian: hanya kolom yang dikirim yang diubah — sakelar sensor tidak boleh
-    // ikut menghapus pilihan mata uang, begitu juga sebaliknya.
+    // ---- display: secondary currency ----
+    // Only an annotation on the dashboard. The engine, budget limits, and all calculations stay
+    // in dollars — changing the choice here touches not a single bot decision.
+    // Partial: only the fields sent are changed — the redaction switch must not
+    // erase the currency choice, and vice versa.
     'POST /api/settings/display': async (req) => {
       const b = await readBody(req);
       if ('hide_values' in b) {
@@ -534,8 +534,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       if (code && !CURRENCIES[code]) return { error: 'Mata uang itu tidak ada di daftar.' };
       cfg.display = { ...(cfg.display || {}), currency: code || null };
       saveCfg();
-      // Kurs ditarik sekarang kalau belum ada, supaya angkanya langsung terlihat di
-      // halaman ini — bukan baru muncul beberapa detik kemudian.
+      // The rate is pulled now if it does not exist yet, so the figure is visible right away on
+      // this page — not only appearing a few seconds later.
       if (code && fx) await fx.refresh().catch(() => {});
       return { ok: true, fx: code && fx ? fx.view(code) : null };
     },
@@ -547,7 +547,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return v.rate ? { ok: true, fx: v } : { error: fx.error || 'Kurs gagal diambil.' };
     },
 
-    // ---- OpenAPI GMGN ----
+    // ---- GMGN OpenAPI ----
     'POST /api/settings/gmgn': async (req) => {
       const b = await readBody(req);
       const locked = lockedByEnv('gmgn.api_key'); if (locked) return locked;
@@ -557,8 +557,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       saveCfg();
       return { ok: true, gmgn: gmgnView() };
     },
-    // Uji key: minta lilin 1 jam token native chain ini. Sukses = key diterima dan
-    // chain ini didukung; galat dikembalikan apa adanya supaya jelas sebabnya.
+    // Test the key: ask for 1-hour candles of this chain's native token. Success = the key is accepted and
+    // this chain is supported; an error is returned as it is so the cause is clear.
     'POST /api/settings/gmgn/test': async () => {
       if (!cfg.gmgn?.api_key) return { error: 'Isi API key dulu.' };
       if (!market) return { error: 'Modul pasar belum siap.' };
@@ -585,7 +585,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return { ok: true, restartNeeded: true };
     },
 
-    // ---- bot Telegram ----
+    // ---- Telegram bot ----
     'POST /api/settings/telegram': async (req) => {
       const b = await readBody(req);
       const t = { ...(cfg.telegram || {}) };
@@ -605,8 +605,8 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       cfg.telegram = t;
       saveCfg();
       log('pengaturan Telegram diperbarui');
-      // Token baru langsung dipakai — tanpa restart proses, sama seperti daftar RPC.
-      // Tanpa ini bot diam saja setelah token disimpan dan tidak ada petunjuk kenapa.
+      // A new token is used right away — without a process restart, the same as the RPC list.
+      // Without this the bot stays silent after the token is saved and there is no hint why.
       if (tokenChanged && telegram) {
         const r = await telegram.restart();
         if (t.bot_token && r?.error) return { error: `Token tersimpan, tapi Telegram menolaknya: ${r.error}`, telegram: tgView() };
@@ -632,7 +632,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       return errs.length ? { error: errs.join(' · ') } : { ok: true, sent: ids.length };
     },
 
-    // ---- token akses ----
+    // ---- access token ----
     'POST /api/settings/token/rotate': async (req, url, res) => {
       const locked = lockedByEnv('server.auth_token'); if (locked) return locked;
       const tok = crypto.randomBytes(18).toString('base64url');

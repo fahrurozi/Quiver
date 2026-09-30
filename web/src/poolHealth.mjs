@@ -1,8 +1,8 @@
 // Heuristic thresholds, not a prediction. Missing data never means healthy.
 const finite = (v) => v != null && Number.isFinite(Number(v));
-// gmgn: profil token dari OpenAPI GMGN (/api/gmgn/token) — undefined kalau API
-// key belum diisi (tidak dinilai), { error } kalau sedang gagal (dicatat sebagai
-// data kurang), atau objek dengan `security`/`stat`/`dev` (lihat src/gmgn.js).
+// gmgn: token profile from the GMGN OpenAPI (/api/gmgn/token) — undefined if the API
+// key is not set (not rated), { error } if it is failing (recorded as
+// insufficient data), or an object with `security`/`stat`/`dev` (see src/gmgn.js).
 export function poolHealth({ pool = {}, pair, holders, open = [], gmgn, now = Date.now() }) {
   const signals = [], missing = [];
   const add = (level, key, values = {}) => signals.push({ level, key, values });
@@ -44,14 +44,14 @@ export function poolHealth({ pool = {}, pair, holders, open = [], gmgn, now = Da
     if (holders.holderCount == null || top10 == null) missing.push('Jumlah holder atau cakupan 10 alamat terbesar belum lengkap.');
     if (holders.holderCount != null && holders.holderCount < 100) add('warn', 'Baru {value} alamat memiliki token ini.', { value: holders.holderCount });
   }
-  // Sinyal GMGN: keamanan kontrak dan perilaku dev/trader yang tidak terlihat dari
-  // harga maupun daftar holder. Aturannya dipisah ke gmgnSignals() karena dipakai
-  // juga oleh titik indikator di daftar posisi — dua tempat yang menilai token yang
-  // sama tidak boleh memakai ambang yang berbeda.
+  // GMGN signals: contract security and dev/trader behaviour that cannot be seen from
+  // the price or the holder list. The rules are split into gmgnSignals() because they are also used
+  // by the indicator dot in the positions list — two places that rate the
+  // same token must not use different thresholds.
   const gm = gmgn && !gmgn.error && gmgn.enabled !== false && (gmgn.address == null || gmgn.address === pool.baseToken?.toLowerCase()) ? gmgn : null;
   if (gmgn && !gm) missing.push('Data GMGN belum tersedia; keamanan kontrak belum dinilai.');
-  // Konsentrasi top-10 versi GMGN hanya dipakai kalau daftar holder kita sendiri
-  // tidak ada, supaya tidak dihitung dua kali.
+  // GMGN's top-10 concentration is only used if our own holder list
+  // is missing, so it is not counted twice.
   if (gm) for (const s of gmgnSignals(gm, { skipTop10: holdersOk }).signals) signals.push(s);
   const out = open.filter((p) => p.inRange === false).length;
   if (out) add('warn', '{value} posisi bot di luar rentang dan tidak menghasilkan fee swap.', { value: out });
@@ -61,11 +61,11 @@ export function poolHealth({ pool = {}, pair, holders, open = [], gmgn, now = Da
   return { status, signals, missing, holdersOk: !!holdersOk, eligible, largest, top10, gmgnOk: !!gm };
 }
 
-// Aturan GMGN saja, dipakai panel Kesehatan pool dan titik indikator di daftar
-// posisi. `graded` menjawab pertanyaan yang berbeda dari daftar sinyal: apakah ada
-// cukup data untuk berkata "tidak ada tanda bahaya" sama sekali. Banyak token di
-// chain ini hanya terisi sebagian di GMGN (rug/insider null) — diam bukan berarti
-// aman, dan itu yang membedakan titik hijau dari titik abu-abu.
+// GMGN rules only, used by the Pool health panel and the indicator dot in the positions
+// list. `graded` answers a different question from the signal list: is there
+// enough data to say "no warning signs" at all. Many tokens on this
+// chain are only partially filled in GMGN (rug/insider null) — silence does not mean
+// safe, and that is what distinguishes a green dot from a grey dot.
 export function gmgnSignals(gm, { skipTop10 = false } = {}) {
   const signals = [];
   const add = (level, key, values = {}) => signals.push({ level, key, values });
@@ -86,8 +86,8 @@ export function gmgnSignals(gm, { skipTop10 = false } = {}) {
   if (sec.ownerRenounced === false) add('warn', 'Kepemilikan kontrak belum dilepas; owner masih bisa mengubah kontrak (GMGN).');
   const t10 = finite(sec.top10Pct) ? sec.top10Pct : gm?.stat?.top10Pct;
   if (!skipTop10 && finite(t10) && t10 >= 40) add(t10 >= 60 ? 'risk' : 'warn', '10 wallet terbesar memegang {value}% suplai (GMGN).', { value: Number(t10).toFixed(1) });
-  // Cukup dinilai kalau GMGN benar-benar menjawab soal kontraknya: honeypot dan
-  // pajak adalah dua kolom yang terisi untuk hampir semua token yang dia kenal.
+  // It is enough to rate if GMGN really answers about the contract: honeypot and
+  // tax are two columns that are filled for almost every token it knows.
   const graded = sec.honeypot != null && (finite(sec.buyTaxPct) || finite(sec.sellTaxPct) || sec.openSource != null);
   const level = signals.some((s) => s.level === 'risk') ? 'risk' : signals.length ? 'warn' : graded ? 'ok' : 'unknown';
   return { signals, graded, level };

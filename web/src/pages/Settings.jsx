@@ -205,7 +205,7 @@ function WalletTab({ d, reload }) {
   );
 }
 
-// ---------------- drawdown harian ----------------
+// ---------------- daily drawdown ----------------
 function RiskTab({ d, setD }) {
   const { t } = useI18n();
   const st = d.risk?.status || {};
@@ -274,8 +274,8 @@ function Caps({ e }) {
   );
 }
 
-// `rank`/`total` = urutan prioritas; onMove(-1|+1) menggeser naik/turun. Yang teratas
-// dipakai lebih dulu, sisanya cadangan berurutan (lihat rpc.js usable()).
+// `rank`/`total` = priority order; onMove(-1|+1) shifts up/down. The top one
+// is used first, the rest are ordered fallbacks (see rpc.js usable()).
 function RpcRow({ e, rank, total, onSave, onDelete, onMove }) {
   const { t } = useI18n();
   const [edit, setEdit] = useState(false);
@@ -321,9 +321,9 @@ function RpcRow({ e, rank, total, onSave, onDelete, onMove }) {
   );
 }
 
-// Jawaban yang tidak bisa berubah lagi (blok lampau) disimpan di database dan dipakai
-// ulang tanpa menyentuh jaringan — lihat src/rpccache.js. Barisnya cuma laporan: tidak
-// ada yang perlu disetel, dan cache yang kosong pun tidak salah.
+// Answers that can no longer change (past blocks) are stored in the database and reused
+// without touching the network — see src/rpccache.js. The row is only a report: there is
+// nothing to tune, and an empty cache is not wrong either.
 function RpcCache({ c }) {
   const { t } = useI18n();
   if (!c) return null;
@@ -409,7 +409,7 @@ function RpcTab({ d, setD }) {
   );
 }
 
-// ---------------- form sederhana ----------------
+// ---------------- simple form ----------------
 function SimpleForm({ title, desc, fields, initial, url, okText, extra, envName, onSaved }) {
   const { t } = useI18n();
   const [v, setV] = useState(initial);
@@ -461,8 +461,8 @@ function SimpleForm({ title, desc, fields, initial, url, okText, extra, envName,
   );
 }
 
-// Kolom yang diatur lewat .env: dasbor menolak mengubahnya (akan tertimpa lagi saat
-// restart), jadi yang ditampilkan adalah di mana mengubahnya.
+// Fields managed through .env: the dashboard refuses to change them (they would be overwritten again on
+// restart), so what is shown is where to change them.
 function EnvNotice({ name, what }) {
   const { t } = useI18n();
   return (
@@ -472,10 +472,10 @@ function EnvNotice({ name, what }) {
   );
 }
 
-// ---------------- OpenAPI GMGN ----------------
-// Key dipakai server untuk menarik lilin harga versi GMGN (tab Chart, sumber "GMGN")
-// — data yang sama dengan chart gmgn.ai, digambar di chart kita supaya rentang
-// posisi bot ikut tergambar. Tidak dikirim utuh ke peramban.
+// ---------------- GMGN OpenAPI ----------------
+// The key is used by the server to pull GMGN's price candles (Chart tab, "GMGN" source)
+// — the same data as the gmgn.ai chart, drawn on our chart so the bot's position
+// range is drawn too. It is not sent whole to the browser.
 function GmgnTab({ d, reload }) {
   const { t } = useI18n();
   const g = d.gmgn || {};
@@ -529,7 +529,7 @@ function GmgnTab({ d, reload }) {
   );
 }
 
-// ---------------- bot Telegram ----------------
+// ---------------- Telegram bot ----------------
 function TelegramTab({ d, reload }) {
   const { t } = useI18n();
   const tg = d.telegram || {};
@@ -628,10 +628,10 @@ function TelegramTab({ d, reload }) {
   );
 }
 
-// ---------------- tampilan: mata uang kedua ----------------
-// Bukan pengaturan mesin: tidak ada satu pun keputusan bot yang berubah karenanya.
-// Yang berubah cuma cara dasbor menulis angka — dolar tetap angka utamanya, mata uang
-// pilihan menempel kecil di sebelahnya.
+// ---------------- display: secondary currency ----------------
+// Not an engine setting: not a single bot decision changes because of it.
+// Only the way the dashboard writes numbers changes — dollars stay the main figure, the chosen
+// currency sits small beside it.
 function DisplayTab({ d, reload }) {
   const { t } = useI18n();
   const dp = d.display || {};
@@ -653,8 +653,8 @@ function DisplayTab({ d, reload }) {
     say(r, 'Kurs diperbarui');
     if (!r.error) reload();
   };
-  // Sakelar yang sama dengan ikon mata (privacy.js): nilainya diambil dari sana,
-  // bukan dari muatan halaman ini, supaya tidak basi kalau mata ditekan di tempat lain.
+  // The same switch as the eye icon (privacy.js): the value is taken from there,
+  // not from this page's payload, so it does not go stale if the eye is pressed elsewhere.
   const [hidden, toggleHidden] = usePrivacy();
   const hide = async () => {
     setBusy('hide');
@@ -662,7 +662,7 @@ function DisplayTab({ d, reload }) {
     setBusy('');
     say(r, hidden ? 'Nilai portofolio kini tampil' : 'Nilai portofolio kini tersensor');
   };
-  // Contoh dipakai supaya pilihannya terlihat hasilnya sebelum pindah halaman.
+  // An example is used so the choice shows its result before leaving the page.
   const sample = fx?.rate ? fxFormat(1234.56, fx) : null;
   return (
     <div className="flex flex-col gap-10">
@@ -731,7 +731,7 @@ function SecurityTab({ d }) {
   );
 }
 
-// ---------------- cadangan & pemulihan ----------------
+// ---------------- backup & restore ----------------
 const BACKUP_PARTS = [
   ['config', 'Pengaturan', 'config.json: aturan, target, RPC, gas, notifikasi, Telegram. Rahasia yang diatur lewat .env tidak ikut.'],
   ['db', 'Basis data', 'Riwayat posisi, transaksi, ekuitas, riset wallet target. Cache RPC tidak ikut (terisi lagi sendiri).'],
@@ -760,7 +760,7 @@ const mb = (n) => (n < 1e6 ? `${Math.max(1, Math.round(n / 1e3)).toLocaleString(
 function BackupTab({ d }) {
   const { t } = useI18n();
   const hasWallet = !!d.wallet?.address;
-  // ---- buat cadangan ----
+  // ---- create a backup ----
   const [pick, setPick] = useState({ config: true, db: true, wallet: false });
   const [tok, setTok] = useState('');
   const [pass, setPass] = useState('');
@@ -783,7 +783,7 @@ function BackupTab({ d }) {
     toast.success(tt('Cadangan terunduh ({s}) — simpan di tempat aman: isinya bisa berisi API key dan riwayat lengkap bot.', { s: mb(blob.size) }));
   };
 
-  // ---- pulihkan ----
+  // ---- restore ----
   const [file, setFile] = useState(null);        // { name, size, backup }
   const [fileErr, setFileErr] = useState('');
   const [rpick, setRpick] = useState({});
@@ -817,7 +817,7 @@ function BackupTab({ d }) {
     setRtok(''); setRpass('');
     if (r.wallet && !r.wallet.unchanged) toast.success(tt('Wallet {a} terpasang', { a: r.wallet.address }));
     if (!r.restarting) { toast.success(tt('Cadangan dipulihkan')); return; }
-    // Bot berhenti tertib lalu dinyalakan lagi oleh pm2; berkasnya ditukar saat boot.
+    // The bot stops in an orderly way and is started again by pm2; the files are swapped at boot.
     setRestarting(true);
     const t0 = Date.now();
     await new Promise((res) => setTimeout(res, 5000));

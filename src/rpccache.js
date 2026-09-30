@@ -1,32 +1,32 @@
 'use strict';
-// Cache jawaban RPC yang SUDAH TIDAK BISA BERUBAH LAGI.
+// Cache of RPC answers that can NO LONGER CHANGE.
 //
-// Sebagian besar beban RPC di sini bukan data hidup, melainkan data mati yang dibaca
-// berulang-ulang: receipt transaksi yang sama dibaca tiap sinkron (30 detik), header
-// blok lampau dibaca lagi tiap kali riwayat dihitung ulang, saldo di blok lampau
-// dibaca ulang tiap kali pelacak modal membelah rentang, dan getLogs untuk rentang
-// blok yang sama diminta lagi setiap wallet dipindai ulang. Jawabannya tidak mungkin
-// berbeda — blok yang sudah lewat tidak berubah — tetapi tiap pembacaan tetap memakan
-// jatah endpoint (Alchemy 429 "monthly capacity", ordofi "network is busy").
+// Most of the RPC load here is not live data but dead data read
+// over and over: the same transaction receipt is read on every sync (30 seconds), past
+// block headers are read again each time history is recomputed, balances at past blocks
+// are re-read each time the capital tracker splits a range, and getLogs for the same
+// block range is requested again each time a wallet is rescanned. The answers cannot
+// differ — a block that has passed does not change — yet every read still eats
+// the endpoint's quota (Alchemy 429 "monthly capacity", ordofi "network is busy").
 //
-// Jadi: panggilan yang TERIKAT pada satu blok lampau disimpan; jawabannya dipakai
-// lagi tanpa menyentuh jaringan. Yang tidak terikat blok (eth_blockNumber, eth_call
-// di `latest`, gas, saldo terkini) tidak pernah masuk sini — itu justru data yang
-// harus selalu baru.
+// So: calls that are TIED to a single past block are stored; the answer is reused
+// without touching the network. What is not tied to a block (eth_blockNumber, eth_call
+// at `latest`, gas, current balances) never enters here — that is precisely data that
+// must always be fresh.
 //
-// Dua lapis: Map di memori (proses yang sedang jalan) dan tabel `rpc_cache` di
-// SQLite (bertahan lintas restart dan deploy). Kunci memuat chain, jadi satu database
-// yang dipakai beberapa chain tidak saling tertukar.
+// Two layers: a Map in memory (the running process) and the `rpc_cache` table in
+// SQLite (survives restarts and deploys). The key includes the chain, so one database
+// used by several chains does not get them mixed up.
 //
-// Syarat "sudah pasti": blok yang dirujuk harus tertinggal minimal `confirmations`
-// blok dari kepala rantai yang terakhir kita lihat. Selama tinggi rantai belum
-// diketahui (belum ada satu pun eth_blockNumber), tidak ada yang disimpan.
+// The "already final" condition: the referenced block must lag at least `confirmations`
+// blocks behind the chain head we last saw. While the chain height is not yet
+// known (not a single eth_blockNumber yet), nothing is stored.
 const crypto = require('node:crypto');
 
 const numTag = (t) => (typeof t === 'string' && /^0x[0-9a-f]+$/i.test(t) ? parseInt(t, 16) : null);
 
-// Kunci yang stabil: urutan kolom objek tidak boleh mengubah kunci (filter getLogs
-// ditulis dengan urutan berbeda di beberapa pemanggil), dan hex besar/kecil sama saja.
+// A stable key: the order of an object's fields must not change the key (getLogs filters
+// are written in different orders by several callers), and upper/lower-case hex is the same.
 function stable(v) {
   if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`;
   if (v && typeof v === 'object') {
@@ -37,21 +37,21 @@ function stable(v) {
 }
 function keyOf(method, params) {
   const s = `${method}|${stable(params || [])}`;
-  // Kunci panjang (filter getLogs dengan banyak topik) diringkas — indeks SQLite
-  // tidak perlu memikul kalimat sepanjang itu.
+  // Long keys (getLogs filters with many topics) are condensed — the SQLite index
+  // does not need to carry a sentence that long.
   return s.length <= 160 ? s : `${method}|#${crypto.createHash('sha1').update(s).digest('hex')}`;
 }
 
-// Panggilan yang jawabannya terikat pada satu blok. `block` = blok itu; `blockOf` =
-// bloknya baru ketahuan dari jawabannya (receipt dan transaksi membawa blockNumber
-// sendiri; selama masih pending, keduanya null dan tidak ada yang disimpan).
-// Yang tidak ada di sini tidak pernah disimpan.
+// A call whose answer is tied to a single block. `block` = that block; `blockOf` =
+// the block is only known from the answer (receipts and transactions carry their own
+// blockNumber; while still pending, both are null and nothing is stored).
+// What is not here is never stored.
 function pinOf(method, params) {
   switch (method) {
-    // Identitas rantai: tidak terikat blok mana pun.
+    // Chain identity: not tied to any block.
     case 'eth_chainId': return { block: 0 };
     case 'eth_getBlockByNumber': {
-      const b = numTag(params?.[0]);      // 'latest'/'pending' -> null, tidak disimpan
+      const b = numTag(params?.[0]);      // 'latest'/'pending' -> null, not stored
       return b == null ? null : { block: b };
     }
     case 'eth_getBlockByHash': return { blockOf: (r) => numTag(r?.number) };
@@ -67,13 +67,13 @@ function pinOf(method, params) {
       const b = numTag(params?.[2]);
       return b == null ? null : { block: b };
     }
-    // eth_call di blok lampau (node arsip): hasilnya fungsi murni dari state blok itu.
+    // eth_call at a past block (archive node): its result is a pure function of that block's state.
     case 'eth_call': {
       const b = numTag(params?.[1]);
       return b == null ? null : { block: b };
     }
-    // Rentang yang kedua ujungnya sudah lewat. Blok acuannya ujung KANAN: itu yang
-    // paling dekat dengan kepala rantai.
+    // A range whose both ends have passed. The reference block is the RIGHT end: that is the one
+    // closest to the chain head.
     case 'eth_getLogs': {
       const f = params?.[0];
       if (!f || f.blockHash) return null;
@@ -96,31 +96,31 @@ class RpcCache {
     this.maxEntry = Math.max(1, max_entry_kb) * 1024;
     this.maxBytes = Math.max(1, max_mb) * 1024 * 1024;
     this.memMax = Math.max(0, mem_entries);
-    // Lapis memori dibatasi dua-duanya: jumlah entri DAN totalnya dalam byte. Satu
-    // jawaban getLogs bisa ratusan kilobyte — 3.000 entri seperti itu akan memakan
-    // memori proses lebih besar daripada seluruh sisa bot.
+    // The memory layer is limited both ways: entry count AND its total in bytes. A single
+    // getLogs answer can be hundreds of kilobytes — 3,000 entries like that would take up more
+    // process memory than the whole rest of the bot.
     this.memBytesMax = Math.max(1, mem_mb) * 1024 * 1024;
     this.memBytes = 0;
     this.mem = new Map();
     this.hits = 0; this.misses = 0; this.writes = 0; this.tooBig = 0;
-    // Per metode: kena / meleset / tak jadi disimpan. Tanpa ini, "cache-nya jalan tidak?"
-    // cuma bisa dijawab dengan tebakan — angka gabungan tidak memberi tahu metode mana
-    // yang terus meleset (mis. receipt yang jawabannya null dan ditanya lagi tiap sinkron).
+    // Per method: hit / miss / not stored. Without this, "is the cache working?"
+    // can only be answered by guessing — a combined figure does not tell which method
+    // keeps missing (e.g. a receipt whose answer is null and is asked again on every sync).
     this.by = {};
     try { this.sweep(); } catch (e) { this.log(`cache rpc: bersih-bersih awal gagal (${e.message})`); }
   }
 
-  // null = panggilan ini tidak pernah boleh disimpan.
+  // null = this call may never be stored.
   plan(method, params) {
     const pin = pinOf(method, params);
     return pin ? { ...pin, method, key: keyOf(method, params) } : null;
   }
 
-  // Blok yang belum cukup dalam tidak akan pernah ada di sini (put menolaknya), jadi
-  // tidak usah ditanyakan ke database sama sekali: mesin membaca fee di blok head-3
-  // tiap tick untuk tiap posisi, dan itu kueri percuma yang berulang selamanya. Juga
-  // menjaga angka "berapa persen dijawab tanpa jaringan" tetap bermakna — yang dihitung
-  // cuma pembacaan yang MEMANG bisa disimpan.
+  // A block that is not deep enough will never be here (put refuses it), so
+  // there is no need to ask the database at all: the engine reads fees at block head-3
+  // every tick for every position, and that is a pointless query repeated forever. It also
+  // keeps the "what percent was answered without the network" figure meaningful — only
+  // reads that CAN be stored are counted.
   tooFresh(plan, head) {
     return plan.block != null && plan.block > 0 && (!head || plan.block > head - this.conf);
   }
@@ -130,12 +130,12 @@ class RpcCache {
     b[field]++;
   }
 
-  // undefined = tidak ada di cache (nilai `null` sendiri tidak pernah disimpan).
+  // undefined = not in the cache (a `null` value itself is never stored).
   //
-  // Yang disimpan di memori adalah TEKS JSON-nya, bukan objeknya: tiap pemanggil
-  // menerima objek barunya sendiri. Pemanggil yang mengubah jawaban di tempat (ethers
-  // suka menormalkan receipt) kalau tidak begini akan ikut mengubah isi cache untuk
-  // semua pemanggil berikutnya — dan itu bug yang sangat sukar dilacak.
+  // What is stored in memory is the JSON TEXT, not the object: every caller
+  // receives its own new object. A caller that mutates the answer in place (ethers
+  // likes to normalise receipts) would otherwise change the cache contents for
+  // all later callers — and that is a very hard bug to trace.
   get(plan, head) {
     if (!plan || this.tooFresh(plan, head)) return undefined;
     const hit = this.mem.get(plan.key);
@@ -157,7 +157,7 @@ class RpcCache {
     if (old !== undefined) this.memBytes -= old.bytes;
     this.mem.set(key, { json, bytes });
     this.memBytes += bytes;
-    // Map menjaga urutan masuk: yang tertua dibuang lebih dulu.
+    // A Map keeps insertion order: the oldest is dropped first.
     while (this.mem.size > this.memMax || this.memBytes > this.memBytesMax) {
       const k = this.mem.keys().next().value;
       if (k === undefined) break;
@@ -166,13 +166,13 @@ class RpcCache {
     }
   }
 
-  // head = tinggi rantai terakhir yang terlihat (0 = belum tahu; tidak menyimpan apa pun).
+  // head = the last chain height seen (0 = unknown; nothing is stored).
   put(plan, result, head) {
     if (!plan || result == null) return false;
     const block = plan.block != null ? plan.block : plan.blockOf(result);
-    // Tidak jadi disimpan: receipt yang masih pending (blok belum ada), atau blok yang
-    // belum cukup dalam. Dicatat per metode — kalau `skip` terus naik sementara `miss`
-    // ikut naik, panggilan itu memang tidak akan pernah bisa di-cache.
+    // Not stored: a receipt that is still pending (no block yet), or a block that
+    // is not deep enough. Counted per method — if `skip` keeps rising while `miss`
+    // rises too, that call can simply never be cached.
     if (block == null) { this.tally(plan.method, 'skip'); return false; }
     if (block > 0 && (!head || block > head - this.conf)) { this.tally(plan.method, 'skip'); return false; }
     let res;
@@ -189,14 +189,14 @@ class RpcCache {
     return true;
   }
 
-  // Buang yang kedaluwarsa, lalu yang tertua kalau tabelnya kelewat besar. Cache yang
-  // hilang cuma berarti satu panggilan RPC lagi — tidak ada data yang ikut hilang.
+  // Drop the expired, then the oldest if the table is too large. A lost cache
+  // only means one more RPC call — no data is lost with it.
   sweep() {
     const t0 = Date.now();
     this.store.run('DELETE FROM rpc_cache WHERE ts < ?', t0 - this.ttlMs);
     const sum = this.store.get('SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM rpc_cache WHERE chain=?', this.chain) || { n: 0, b: 0 };
     if (sum.n <= this.maxRows && sum.b <= this.maxBytes) return 0;
-    // Batasnya dilewati: baris tertua dibuang sampai keduanya kembali di bawah batas.
+    // The limit is exceeded: the oldest rows are dropped until both are back under the limit.
     const rows = this.store.all('SELECT ts, bytes FROM rpc_cache WHERE chain=? ORDER BY ts ASC', this.chain);
     let n = sum.n, b = sum.b, cut = 0, dropped = 0;
     for (const r of rows) {

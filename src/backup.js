@@ -1,21 +1,21 @@
 'use strict';
-// Cadangan & pemulihan satu instance: pengaturan (config.json), basis data, dan wallet.
+// Backup & restore of one instance: settings (config.json), database, and wallet.
 //
-// Satu berkas JSON, isinya dipilih pengguna:
-//   config  — config.json APA ADANYA DI DISK: nilai dari .env sudah berbentuk ${NAMA}
-//             (writeCfg), jadi rahasia di .env tidak ikut. Rahasia yang diketik lewat
-//             dasbor (API key RPC, token Telegram) memang ada di config.json dan ikut.
-//   db      — salinan basis data (sqlite backup API, tidak mengunci mesin) TANPA tabel
-//             rpc_cache: 90%+ ukuran berkasnya, cuma cache yang terisi lagi sendiri.
-//             Di-gzip lalu base64.
-//   wallet  — keystore V3 terenkripsi password, sama dengan ekspor wallet. Kunci privat
-//             mentah tidak pernah masuk berkas.
+// A single JSON file, its contents chosen by the user:
+//   config  — config.json AS IT IS ON DISK: values from .env are already in the ${NAME}
+//             form (writeCfg), so secrets in .env do not come along. Secrets typed through the
+//             dashboard (RPC API key, Telegram token) do live in config.json and come along.
+//   db      — a copy of the database (sqlite backup API, does not lock the engine) WITHOUT the
+//             rpc_cache table: 90%+ of the file size, just a cache that refills by itself.
+//             Gzipped then base64.
+//   wallet  — a password-encrypted V3 keystore, same as the wallet export. The raw private key
+//             never enters the file.
 //
-// Pemulihan config & db TIDAK ditimpa di tempat: proses yang sedang jalan memegang
-// koneksi basis data dan salinan config di memori (yang ditulis balik oleh rute lain).
-// Berkasnya ditaruh sebagai <berkas>.restore-pending, lalu ditukar saat boot oleh
-// applyPendingRestore() sebelum apa pun membukanya. Berkas lama tidak dihapus: dipindah
-// ke <nama>.pre-restore-<waktu>.
+// Restoring config & db is NOT overwritten in place: the running process holds the
+// database connection and an in-memory copy of the config (which other routes write back).
+// The file is put aside as <file>.restore-pending, then swapped at boot by
+// applyPendingRestore() before anything opens it. The old file is not deleted: it is moved
+// to <name>.pre-restore-<time>.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -31,9 +31,9 @@ const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
-// Buang rpc_cache lalu VACUUM, di worker: DatabaseSync itu sinkron, dan VACUUM berkas
-// ~100 MB di thread utama menahan loop mesin (pemindaian blok, keluar posisi) sedetik lebih.
-// `check` = hanya periksa berkas hasil unggahan (integrity + tabel wajib).
+// Drop rpc_cache then VACUUM, in a worker: DatabaseSync is synchronous, and VACUUM of a
+// ~100 MB file on the main thread holds up the engine loop (block scanning, position exit) for over a second.
+// `check` = only inspect the uploaded file (integrity + required tables).
 const WORKER = `
 const { workerData, parentPort } = require('node:worker_threads');
 const { DatabaseSync } = require('node:sqlite');
@@ -68,7 +68,7 @@ function inWorker(data) {
   });
 }
 
-// Salinan basis data yang siap dikemas. `db` = koneksi DatabaseSync yang sedang dipakai.
+// A database copy ready to be packed. `db` = the DatabaseSync connection currently in use.
 async function snapshotDb(db, tmpDir) {
   const tmp = path.join(tmpDir, `backup-${process.pid}-${Date.now()}.db`);
   try {
@@ -98,7 +98,7 @@ async function createBackup({ parts, cfgPath, db, dbPath, wallet, password, meta
   return out;
 }
 
-// Pemeriksaan bentuk berkas. Tidak mempercayai isinya: berkas datang dari unggahan.
+// File shape check. Does not trust its contents: the file comes from an upload.
 function parseBackup(b) {
   if (!b || typeof b !== 'object' || b.format !== FORMAT) throw new Error('Bukan berkas cadangan Quiver.');
   if (!Number.isInteger(b.version) || b.version > VERSION) throw new Error('Versi berkas cadangan lebih baru dari bot ini — perbarui bot dulu.');
@@ -109,10 +109,10 @@ function parseBackup(b) {
   return b;
 }
 
-// Config hasil pulihan. Yang milik MESIN INI tetap dari config yang sekarang: pintu
-// dasbor (port, host, token — memulihkan token lama bisa mengunci pengguna keluar),
-// lokasi basis data dan berkas kunci. Mode selalu simulasi: berkas lama bisa saja
-// dibuat saat LIVE, dan menyalakan transaksi sungguhan harus keputusan yang diketik.
+// The restored config. What belongs to THIS MACHINE stays from the current config: the dashboard
+// door (port, host, token — restoring an old token could lock the user out),
+// the database location and the key file. The mode is always simulation: an old file may have
+// been made while LIVE, and turning on real transactions must be a typed decision.
 function mergeConfig(restored, current) {
   const out = JSON.parse(JSON.stringify(restored));
   for (const k of ['server', 'db']) {
@@ -123,9 +123,9 @@ function mergeConfig(restored, current) {
   return out;
 }
 
-// Tulis bagian config/db sebagai berkas tertunda. Basis data diperiksa dulu (hash,
-// integritas, tabel wajib) di berkas sementara, baru dipindah ke nama tertunda —
-// berkas tertunda yang ada selalu utuh.
+// Write the config/db parts as pending files. The database is checked first (hash,
+// integrity, required tables) in a temp file, then moved to the pending name —
+// an existing pending file is always intact.
 async function stageRestore({ backup, parts, cfgPath, dbPath }) {
   const staged = [];
   if (parts.db) {
@@ -151,9 +151,9 @@ async function stageRestore({ backup, parts, cfgPath, dbPath }) {
   return staged;
 }
 
-// Dipanggil saat boot, sebelum berkasnya dibuka. Berkas yang sedang dipakai dipindah
-// ke <nama>.pre-restore-<waktu><ext> (beserta -wal/-shm: isi terbaru basis data bisa
-// masih di WAL, dan WAL hanya berlaku di sebelah berkas yang namanya sama).
+// Called at boot, before the file is opened. The file in use is moved
+// to <name>.pre-restore-<time><ext> (along with -wal/-shm: the database's latest contents can
+// still be in the WAL, and a WAL only applies beside a file of the same name).
 function applyPendingRestore(file, log = () => {}) {
   const pending = file + PENDING;
   if (!fs.existsSync(pending)) return null;

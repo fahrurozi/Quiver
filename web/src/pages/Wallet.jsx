@@ -9,7 +9,7 @@ import { useI18n } from '../i18n';
 
 const isAddr = (a) => /^0x[0-9a-f]{40}$/.test(a);
 
-// Halaman riset: cari wallet mana pun. #wallet/0x… langsung membuka alamat itu.
+// Research page: look up any wallet. #wallet/0x… opens that address directly.
 export default function WalletPage({ param }) {
   const { t } = useI18n();
   const initial = param && isAddr(param.toLowerCase()) ? param.toLowerCase() : null;
@@ -24,7 +24,7 @@ export default function WalletPage({ param }) {
   const open = (a = addr.trim().toLowerCase()) => {
     if (!isAddr(a)) return;
     setAddr(a); setCurrent(a);
-    history.replaceState(null, '', '#wallet/' + a);   // bisa di-bookmark / dibagikan
+    history.replaceState(null, '', '#wallet/' + a);   // can be bookmarked / shared
   };
 
   return (
@@ -53,9 +53,9 @@ export default function WalletPage({ param }) {
             <DataTable label="Pernah dipindai" rows={recent} rowKey={(w) => w.address} searchable
               defaultSort={{ column: 'pnl', direction: 'descending' }}
               columns={[
-                // Nama + alamat jadi satu tombol; penanda target dan logo situs luar berdiri
-                // di sampingnya dengan jarak sendiri — dulu tumpukan logo mengalir inline di
-                // belakang tombol sehingga menempel ke chip dan melebarkan kolom.
+                // Name + address become a single button; the target marker and the external site logo stand
+                // next to it with their own spacing — previously the stack of logos flowed inline
+                // behind the button so it stuck to the chip and widened the column.
                 { key: 'a', label: 'Wallet', sort: (w) => w.label || w.address, search: (w) => `${w.label || ''} ${w.address}`, render: (w) => (
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                     <button type="button" onClick={() => open(w.address)} className="group min-w-0 max-w-56 text-start sm:w-56 sm:shrink-0" title={w.address}>

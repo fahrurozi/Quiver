@@ -207,7 +207,7 @@ keputusan yang memicunya. Di bawahnya **catatan bot**: keputusan atas aksi targe
 menaut ke posisi ini dan baris log yang menyebut `#<id>`. Sumbernya tabel `txs`
 (detail JSON menyimpan nomor posisi/pool), `decisions`, dan `logs`
 (`GET /api/position/history?id=`); posisi yang diadopsi tanpa tx tetap punya kejadian
-buka/tutup dari baris posisinya. Uji: `node test/riwayat.js`.
+buka/tutup dari baris posisinya. Uji: `node test/position-history.js`.
 
 ## Isi wallet target (halaman detail target)
 
@@ -316,7 +316,7 @@ jumlah NFT yang pernah dipegangnya.
 **Kenapa ini ada:** wallet yang hanya ber-LP di v3 dulu tampil KOSONG di halaman
 riset, walaupun aktif. Dua sebabnya: modul riset cuma membaca v4, dan `scan()` keluar
 lebih awal begitu daftar posisi v4-nya kosong sehingga jalur v3 tidak pernah
-dijalankan. Keduanya ada uji regresinya di `test/riset.js`.
+dijalankan. Keduanya ada uji regresinya di `test/research.js`.
 
 
 ## Yang bisa disetel
@@ -862,18 +862,18 @@ penitipan ke kontrak otomasi, pool berhook, semua batas (jumlah posisi,
 eksposur, jeda, minimum), posisi satu sisi, saldo kurang, aksi ganda, dan
 antrean jual memecoin sisa.
 
-`node test/riset.js` (11 uji) menguji riset wallet v3 dengan chain dipalsukan:
+`node test/research.js` (11 uji) menguji riset wallet v3 dengan chain dipalsukan:
 pemisahan fee dari pokok, klaim fee tanpa penarikan, NFT yang berpindah tangan lalu
 kembali, penilaian pada harga blok kejadian vs penandaan taksiran — dan dua uji
 regresi untuk bug yang membuat wallet v3 tampil kosong.
 
-`node test/sisa.js` (9 uji) menguji pembukuan sisa memecoin posisi bot: tutup mencatat
+`node test/leftover.js` (9 uji) menguji pembukuan sisa memecoin posisi bot: tutup mencatat
 sisa beserta taksiran harga tutupnya, penjualan (USDG, ETH native, manual FIFO, melebihi
 sisa) mengganti taksiran dengan hasil nyata, ekuitas menilai sisa yang belum terjual di
 harga pool kini (harga tutup kalau tak terbaca), dan token yang hilang dari wallet
 direalisasi di harga kini.
 
-`node test/hasil.js` (10 uji) menguji pelacakan terealisasi/belum setelah tutup: token
+`node test/proceeds.js` (10 uji) menguji pelacakan terealisasi/belum setelah tutup: token
 dipegang dinilai ulang harga pool sekarang, hasil jual USDG & ETH native sesungguhnya,
 FIFO antar-posisi dan saldo lama, zap-out, kirim tanpa hasil, pembaruan lanjutan, dan
 gangguan RPC sesaat yang membiarkan posisi belum terlacak alih-alih tercatat salah.

@@ -1,10 +1,10 @@
-// Grafik lilin dengan TradingView Lightweight Charts: zoom/pan, crosshair, skala
-// log, dan lapisan posisi LP (pita rentang, garis masuk/keluar, harga masuk/kini)
-// yang digambar sebagai *primitive* di kanvas yang sama.
+// Candlestick chart with TradingView Lightweight Charts: zoom/pan, crosshair, log
+// scale, and the LP position layer (range band, entry/exit lines, entry/current price)
+// drawn as a *primitive* on the same canvas.
 //
-// Sumbu harga TIDAK memakai autoscale bawaan: satu wick liar (memecoin sering
-// punya) akan menarik sumbu 10× dan menggepengkan semua lilin lain. Batasnya
-// dihitung dari persentil wick + badan lilin; wick ekstrem dipotong di tepi.
+// The price axis does NOT use the built-in autoscale: a single wild wick (memecoins often
+// have one) would stretch the axis 10× and flatten all the other candles. The bounds are
+// computed from wick percentiles + candle bodies; extreme wicks are cut at the edge.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart, CandlestickSeries, HistogramSeries, LineStyle, PriceScaleMode, CrosshairMode, createSeriesMarkers,
@@ -12,9 +12,9 @@ import {
 import { price as fmtPrice, usd, pct, tone, locale as fmtLocale } from '../fmt';
 import { translate as t } from '../i18n';
 
-// Warna tema (oklch di CSS) -> hex. Lightweight Charts mengolah alpha sendiri dan
-// hanya paham format sRGB, jadi warnanya dicat ke satu piksel kanvas lalu dibaca
-// kembali — cara yang jalan untuk format apa pun yang dikenal browser.
+// Theme colours (oklch in CSS) -> hex. Lightweight Charts processes alpha itself and
+// only understands the sRGB format, so the colour is painted onto a single canvas pixel and read
+// back — a way that works for any format the browser knows.
 const hexCache = new Map();
 function cssColor(name) {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888888';
@@ -28,8 +28,8 @@ function cssColor(name) {
 }
 export const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
 
-// Warna pita rentang saat beberapa posisi digambar di satu grafik (Monitor, detail
-// pool). Dipilih berurutan menurut id posisi supaya warnanya tidak berganti-ganti.
+// Range band colours when several positions are drawn on one chart (Monitor, pool
+// detail). Chosen in order of position id so the colours do not keep changing.
 export const BAND_COLORS = ['#3b82f6', '#a855f7', '#f97316', '#14b8a6', '#ec4899', '#eab308', '#06b6d4', '#8b5cf6'];
 export function palette() {
   const dark = document.documentElement.classList.contains('dark');
@@ -38,13 +38,13 @@ export function palette() {
     up: cssColor('--success'), down: cssColor('--danger'), accent: cssColor('--accent'), warning: cssColor('--warning'),
     muted: cssColor('--muted'), border: cssColor('--border'), fg: cssColor('--foreground'),
     text: dark ? '#9a9aa3' : '#6b6b76',
-    // label crosshair di sumbu: kontras tinggi terhadap kanvas, bukan abu tipis
+    // axis crosshair label: high contrast against the canvas, not a thin grey
     label: dark ? '#3a3a42' : '#4a4a55',
   };
 }
 
-// Lapisan posisi LP di atas lilin. Dibaca ulang tiap kali grafik digambar, jadi
-// cukup mengganti `this.o` lalu minta gambar ulang.
+// LP position layer above the candles. Re-read every time the chart is drawn, so
+// it is enough to replace `this.o` and ask for a redraw.
 class LpOverlay {
   constructor(o) { this.o = o; }
   attached({ chart, series, requestUpdate }) { this.chart = chart; this.series = series; this.requestUpdate = requestUpdate; }
@@ -59,11 +59,11 @@ class LpOverlay {
       const x = (ts) => (ts == null ? null : chart.timeScale().timeToCoordinate(ts));
       const font = '10px ui-sans-serif, system-ui, sans-serif';
       ctx.font = font;
-      // Pita rentang: sampai tepi kalau memanjang di luar grafik. Satu pita (range)
-      // atau banyak (ranges: satu per posisi di pool yang sama, tiap pita warnanya
-      // sendiri; yang terpilih digambar lebih pekat dan bergaris utuh, yang lain
-      // tipis supaya tetap terbaca tanpa saling menutupi). Pita terpilih digambar
-      // terakhir supaya berada di atas.
+      // Range band: to the edge if it extends outside the chart. A single band (range)
+      // or many (ranges: one per position in the same pool, each band with its own
+      // colour; the selected one is drawn more solid with a full line, the others
+      // thin so they stay readable without covering each other). The selected band is drawn
+      // last so it sits on top.
       const bands = o.ranges ? [...o.ranges].sort((a, b) => (a.selected ? 1 : 0) - (b.selected ? 1 : 0)) : o.range ? [{ ...o.range, color: o.c.accent, label: t('rentang'), selected: true }] : [];
       for (const b of bands) {
         let y1 = y(b.hi), y2 = y(b.lo);
@@ -81,9 +81,9 @@ class LpOverlay {
           ctx.fillText(b.label, 4, Math.max(22, y1 + 3));
         }
       }
-      // garis tegak: saat masuk (aksen) & saat keluar (kuning). Labelnya ada di
-      // marker panah pada lilinnya; di sini hanya untuk masuk yang jatuh sebelum
-      // lilin pertama (tidak ada lilin yang bisa dipasangi marker).
+      // vertical lines: at entry (accent) & at exit (yellow). The label is on the
+      // arrow marker on the candle; here only for an entry that falls before the
+      // first candle (no candle to attach a marker to).
       const vline = (ts, label, color) => {
         const xx = x(ts);
         if (xx == null) return;
@@ -97,8 +97,8 @@ class LpOverlay {
   }
 }
 
-// Batas sumbu harga: persentil wick (memotong lonjakan sesaat), seluruh badan
-// lilin, harga masuk/kini, dan pita rentang kalau tidak terlalu lebar.
+// Price axis bounds: wick percentiles (cutting momentary spikes), the whole candle
+// body, entry/current price, and the range band if it is not too wide.
 function domainOf(cs, o) {
   if (!cs.length) return null;
   const q = (arr, f) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(f * (s.length - 1)))]; };
@@ -106,45 +106,45 @@ function domainOf(cs, o) {
   let hi = Math.max(q(cs.map((c) => c.h), 0.97), ...cs.map((c) => Math.max(c.o, c.c)));
   for (const p of [o.entryP, o.exitP, o.nowP, o.bep]) if (p > 0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }
   if (o.range && (o.pickRange || o.range.hi / o.range.lo < 3.5)) { lo = Math.min(lo, o.range.lo); hi = Math.max(hi, o.range.hi); }
-  // Banyak pita: yang terpilih selalu masuk sumbu; yang lain hanya kalau tidak terlalu lebar.
+  // Many bands: the selected one always enters the axis; the others only if not too wide.
   for (const b of o.ranges || []) if (b.selected || b.hi / b.lo < 3.5) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
-  // Saat memilih rentang, batasnya tidak boleh menempel di tepi: label sumbunya
-  // tertutup legenda OHLC dan tombol skala di pojok atas.
+  // When choosing a range, its bounds must not stick to the edge: the axis labels are
+  // covered by the OHLC legend and the scale buttons in the top corner.
   if (o.pickRange) { const f = Math.max(1.03, (hi / lo) ** 0.12); lo /= f; hi *= f; }
   return { lo, hi };
 }
 
 /**
- * candles : [{ t(ms), o, h, l, c, v }] urut naik
- * tf      : '5m' | '1h' | … (untuk format label)
- * quote   : simbol aset kuotasi (legenda)
- * range   : { lo, hi } harga rentang posisi, atau null
- * ranges  : [{ id, lo, hi, color, label, selected }] — banyak pita sekaligus (satu
- *           per posisi di pool yang sama); onRangeClick(id) dipanggil saat pita diklik
- * entry   : { t(ms), p }  exit : { t(ms), p }  now : harga kini — semuanya opsional
- * pickRange : rentang sedang dipilih (LP manual) — kedua batasnya selalu masuk
- *             sumbu, selebar apa pun, dan diberi label harga di sumbu
- * height  : tinggi px
+ * candles : [{ t(ms), o, h, l, c, v }] ascending
+ * tf      : '5m' | '1h' | … (for label formatting)
+ * quote   : quote asset symbol (legend)
+ * range   : { lo, hi } price range of the position, or null
+ * ranges  : [{ id, lo, hi, color, label, selected }] — many bands at once (one
+ *           per position in the same pool); onRangeClick(id) is called when a band is clicked
+ * entry   : { t(ms), p }  exit : { t(ms), p }  now : current price — all optional
+ * pickRange : the range being chosen (manual LP) — both its bounds always enter
+ *             the axis, however wide, and get a price label on the axis
+ * height  : height in px
  */
 export default function CandleChart({ candles, tf, quote, range = null, ranges = null, onRangeClick = null, entry = null, exit = null, now = null, bep = null, pickRange = false, height = 384 }) {
   const box = useRef(null);
   const ref = useRef(null);            // { chart, series, vol, overlay, markers }
-  // Pita & penangan klik dibaca dari ref oleh langganan klik yang dipasang sekali.
+  // Bands & the click handler are read from a ref by the click subscription installed once.
   const bandsRef = useRef({ ranges, onRangeClick });
   bandsRef.current = { ranges, onRangeClick };
   const [hover, setHover] = useState(null);
-  const [scale, setScale] = useState(null);   // null = otomatis
+  const [scale, setScale] = useState(null);   // null = automatic
   const [pal, setPal] = useState(palette);
 
-  // Ganti tema (kelas .dark di <html>) -> warna dibaca ulang.
+  // Theme change (.dark class on <html>) -> colours are re-read.
   useEffect(() => {
     const mo = new MutationObserver(() => setPal(palette()));
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => mo.disconnect();
   }, []);
 
-  // GeckoTerminal sesekali mengirim dua lilin dengan waktu yang sama; Lightweight
-  // Charts menuntut waktu naik ketat, jadi yang kembar dibuang (yang terakhir menang).
+  // GeckoTerminal occasionally sends two candles with the same time; Lightweight
+  // Charts requires strictly ascending time, so duplicates are dropped (the last one wins).
   const data = useMemo(() => {
     const out = [];
     for (const c of candles || []) {
@@ -157,7 +157,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
     return out;
   }, [candles]);
   const secs = data.length > 1 ? data[1].time - data[0].time : 60;
-  // Penanda waktu dipasang pada lilin yang memuatnya.
+  // The time marker is attached to the candle that contains it.
   const snap = (ms) => {
     if (!ms || !data.length) return null;
     const s = ms / 1000;
@@ -168,16 +168,16 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
   const entryT = snap(entry?.t), exitT = snap(exit?.t);
   const entryBefore = !!(entry?.t && data.length && data[0].time * 1000 > entry.t);
   const dom = useMemo(() => domainOf(data.map((d) => ({ o: d.open, h: d.high, l: d.low, c: d.close })), { entryP: entry?.p, exitP: exit?.p, nowP: now, bep, range, ranges, pickRange }), [data, entry?.p, exit?.p, now, bep, range, ranges, pickRange]);
-  // Log kalau rentang harga yang tampil lebih dari 4× — pergerakan persen jadi sebanding.
+  // Log if the displayed price range is more than 4× — percent moves become comparable.
   const log = scale ? scale === 'log' : !!(dom && dom.hi / dom.lo > 4);
 
-  // Buat grafik sekali.
+  // Create the chart once.
   useEffect(() => {
     const el = box.current;
     const chart = createChart(el, {
       autoSize: true,
       layout: { background: { color: 'transparent' }, textColor: pal.text, fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif', fontSize: 11, attributionLogo: false },
-      // garis bantu: rambut utuh & redup — titik-titik terbaca sebagai ambang, bukan grid
+      // helper lines: full & dim hairline — dots read as a threshold, not a grid
       grid: { vertLines: { visible: false }, horzLines: { color: withAlpha(pal.border, 0.6), style: LineStyle.Solid } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 3, minBarSpacing: 2, shiftVisibleRangeOnNewBar: false,
@@ -209,8 +209,8 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
       setHover(d && e.time != null ? { ...d, v: e.seriesData.get(vol)?.value ?? 0 } : null);
     };
     chart.subscribeCrosshairMove(onMove);
-    // Klik pita rentang -> pilih posisinya. Pita yang paling sempit menang kalau
-    // bertumpuk; kursor jadi telunjuk saat melayang di atas pita yang bisa diklik.
+    // Click a range band -> select its position. The narrowest band wins if
+    // they overlap; the cursor becomes a pointer when hovering over a clickable band.
     const bandAt = (point) => {
       const { ranges: rs, onRangeClick: cb } = bandsRef.current;
       if (!rs?.length || !cb || !point) return null;
@@ -227,7 +227,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
     return () => { chart.unsubscribeCrosshairMove(onMove); chart.unsubscribeCrosshairMove(onHover); chart.unsubscribeClick(onClick); chart.remove(); ref.current = null; };
   }, []);
 
-  // Warna mengikuti tema.
+  // Colours follow the theme.
   useEffect(() => {
     const r = ref.current; if (!r) return;
     r.chart.applyOptions({ layout: { textColor: pal.text }, grid: { horzLines: { color: withAlpha(pal.border, 0.6) } },
@@ -245,7 +245,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
   // Fit once for each candle interval, after that interval has data.
   const fittedTf = useRef(null);
 
-  // Data, skala, dan lapisan posisi.
+  // Data, scale, and the position layer.
   useEffect(() => {
     const r = ref.current; if (!r) return;
     r.dom = dom;
@@ -261,9 +261,9 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
       line(range.hi, pal.accent, t('batas atas'));
       line(range.lo, pal.accent, t('batas bawah'));
     }
-    // Harga pool kini hanya digaris kalau berbeda dari penutupan lilin terakhir —
-    // kalau sama, label nilai terakhir seri sudah menunjukkannya; dua label kembar
-    // di sumbu (merah 0,0106 dan putih 0,0106) cuma berisik.
+    // The current pool price is only lined if it differs from the last candle's close —
+    // if the same, the series' last-value label already shows it; two twin labels
+    // on the axis (red 0.0106 and white 0.0106) are just noise.
     const lastClose = data[data.length - 1]?.close;
     if (now > 0 && !exit && !(lastClose > 0 && Math.abs(now / lastClose - 1) < 0.003)) line(now, withAlpha(pal.fg, 0.55), t('kini'), LineStyle.Dotted);
     r.overlay.set({ range, ranges, entryT, exitT, entryBefore, c: pal, dark: pal.dark });

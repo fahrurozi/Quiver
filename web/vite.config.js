@@ -3,15 +3,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 
-// Build statis; Node server (src/server.js) yang menyajikan dist/ + API di origin yang sama.
+// Static build; the Node server (src/server.js) serves dist/ + the API on the same origin.
 //
-// Dua entri:
-//   index.html — dasbor (React + HeroUI), di balik gerbang token.
-//   mini.html  — mini app Telegram (/mini), JS polos tanpa React. Ia dimuat SEBELUM
-//                ada sesi, jadi server cuma membukakan gerbang untuk berkas bernama
-//                mini-* (server.js: MINI_PUBLIC). Karena itu web/src/mini/ tidak boleh
-//                mengimpor apa pun dari web/src/: modul bersama akan dipindahkan Rollup
-//                ke potongan bernama lain, dan potongan itu tidak akan pernah terkirim.
+// Two entries:
+//   index.html — the dashboard (React + HeroUI), behind the token gate.
+//   mini.html  — Telegram mini app (/mini), plain JS without React. It is loaded BEFORE
+//                there is a session, so the server only opens the gate for files named
+//                mini-* (server.js: MINI_PUBLIC). Because of that web/src/mini/ must not
+//                import anything from web/src/: a shared module would be moved by Rollup
+//                into a chunk with another name, and that chunk would never be shipped.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {

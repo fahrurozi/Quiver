@@ -64,9 +64,9 @@ const rules = [
   [/^(.+?) belum terjual: (.+)$/s, '{1} remains unsold: {2}', '{1} belum terjual: {2}'],
   [/^rute Kyber rugi ([\d.,]+)% \(batas ([\d.,]+)%\)(.*)$/s, 'Kyber route loss is {1}% (limit {2}%){3}', 'Kerugian rute Kyber {1}% (batas {2}%){3}'],
   [/^dipotong oleh (.+?) \((\$[\d.,]+)\)(.*)$/s, 'Position size capped by the {1} ({2}){3}', 'Ukuran posisi dibatasi oleh {1} ({2}){3}'],
-  // Catatan ukuran dari policy.js: "<mode> → $200.00". Modenya istilah berkas
-  // aturan, bukan kalimat — dan baris ini yang paling sering dibaca di Aktivitas,
-  // karena menjawab "kenapa segini yang masuk".
+  // Size note from policy.js: "<mode> → $200.00". The mode is a term from the rules
+  // file, not a sentence — and this line is the one read most often in Activity,
+  // because it answers "why did it enter with this much".
   [/^mirror → (\$[\d.,]+)$/, 'Matched the target\u2019s liquidity → {1}', 'Menyamai likuiditas target → {1}'],
   [/^pct → (\$[\d.,]+)$/, 'Percentage of the target\u2019s position → {1}', 'Persentase dari posisi target → {1}'],
   [/^multiplier → (\$[\d.,]+)$/, 'Multiple of the target\u2019s position → {1}', 'Kelipatan dari posisi target → {1}'],

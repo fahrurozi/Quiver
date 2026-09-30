@@ -1,12 +1,12 @@
-// Laci riwayat satu posisi wallet yang diriset — dibuka dengan mengklik baris di
-// tabel "Posisi berjalan"/"Riwayat posisi" halaman Wallet.
+// History drawer of one researched wallet position — opened by clicking a row in the
+// "Running positions"/"Position history" tables on the Wallet page.
 //
-// Bedanya dengan laci posisi bot (PositionHistory): di sini tidak ada catatan bot,
-// karena posisinya bukan milik kita. Yang ada justru lebih mentah dan lebih menarik
-// untuk riset — setiap kejadian on-chain yang menyentuh posisi itu, dengan POKOK dan
-// FEE yang sudah dipisahkan, plus harga pool di blok kejadian. Semuanya sudah
-// tersimpan saat pindai wallet (tabel wevents), jadi membuka laci ini tidak
-// memanggil chain sama sekali.
+// Unlike the bot position drawer (PositionHistory): there are no bot notes here,
+// because the position is not ours. What is here is rawer and more interesting
+// for research — every on-chain event that touched the position, with PRINCIPAL and
+// FEE already separated, plus the pool price at the event's block. All of it is already
+// stored when the wallet is scanned (wevents table), so opening this drawer
+// does not call the chain at all.
 import { useEffect, useState } from 'react';
 import { Button, Chip, Drawer } from '@heroui/react';
 import { X, ChartCandlestick, PlusCircle } from 'lucide-react';
@@ -26,8 +26,8 @@ const KIND = {
 const fmtDate = (ts) => (ts ? new Date(ts).toLocaleString(fmtLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 const big = (v) => { try { return BigInt(String(v ?? '0')); } catch { return 0n; } };
 
-// "decrease" yang menghabiskan likuiditas adalah penutupan posisi — bedanya cuma
-// terlihat dari likuiditas berjalan, jadi dihitung di sini, bukan disimpan per baris.
+// A "decrease" that exhausts the liquidity is a position close — the difference is only
+// visible from the running liquidity, so it is computed here, not stored per row.
 function withKinds(events) {
   let liq = 0n;
   return events.map((e) => {
@@ -38,9 +38,9 @@ function withKinds(events) {
   });
 }
 
-// Jumlah token pada satu kejadian, dipecah jadi pokok dan fee — inilah yang membuat
-// riwayat wallet bisa dipercaya: penarikan yang tampak besar sering sebagian besar
-// pokok, bukan hasil.
+// Token amounts in one event, split into principal and fee — this is what makes
+// a wallet's history trustworthy: a withdrawal that looks large is often mostly
+// principal, not profit.
 function Amounts({ ev, p }) {
   const { t } = useI18n();
   const row = (addr, sym, raw, dec, cls = '') => {
@@ -72,7 +72,7 @@ function Amounts({ ev, p }) {
 
 function Events({ events, p }) {
   const { t } = useI18n();
-  const evs = [...withKinds(events)].reverse();   // terbaru di atas, seperti tabel lain
+  const evs = [...withKinds(events)].reverse();   // newest on top, like the other tables
   if (!evs.length) {
     return <Empty title="Belum ada kejadian tercatat"
       sub="Riwayat posisi ini ada di luar jendela pindai — perluas jendelanya lalu pindai ulang." />;
@@ -116,29 +116,29 @@ function Events({ events, p }) {
   );
 }
 
-// ---- sisi kita atas posisi orang lain ----
+// ---- our side of someone else's position ----
 //
-// Laci ini menilai posisi WALLET LAIN sampai tuntas, lalu berhenti tepat sebelum
-// pertanyaan yang membuat orang membukanya: "kita ikut atau tidak?". Jawabannya
-// dulu tersebar — salinan kita di halaman Posisi, alasan melewat di Aktivitas —
-// jadi menilai satu posisi target berarti membuka tiga halaman dan mencocokkan
-// nomor NFT sendiri. Di sini keduanya diletakkan di bawah angka target: salinan
-// kita kalau ada, dan kalau tidak, alasan mesin menolak — apa adanya, dengan
-// kata-kata yang sama seperti yang tercatat saat keputusannya dibuat.
+// This drawer assesses ANOTHER WALLET's position thoroughly, then stops just before the
+// question that makes people open it: "do we follow it or not?". The answer
+// used to be scattered — our copy on the Positions page, the reason for skipping in Activity —
+// so assessing one target position meant opening three pages and matching
+// NFT numbers by hand. Here both are placed under the target's figures: our
+// copy if there is one, and if not, the reason the engine refused — as it is, in
+// the same words as recorded when the decision was made.
 const VERDICT = { copy: ['Disalin', 'success'], dry: ['Simulasi', 'accent'], skip: ['Dilewati', 'default'], error: ['Gagal', 'danger'] };
-const AKSI = {
+const ACTIONS = {
   mint: 'buka posisi', increase: 'tambah likuiditas', decrease: 'tarik likuiditas', burn: 'tutup posisi',
   collect: 'klaim fee', claim: 'klaim fee', transfer_in: 'terima posisi', transfer_out: 'kirim posisi',
   custody_in: 'ambil dari otomasi', custody_out: 'titip ke otomasi',
 };
 const STATUS = { open: ['Terbuka', 'success'], closed: ['Ditutup', 'danger'], pending: ['Menunggu', 'warning'], failed: ['Gagal', 'danger'] };
 
-// Tautan "Salin manual": posisi target dibawa ke halaman LP manual dengan pool dan
-// rentangnya sudah terisi. Rentangnya diterjemahkan ke bahasa halaman itu — persen
-// bertanda tiap batas TERHADAP HARGA KINI, bukan tick — supaya pool yang dikuotasi
-// token0 (harganya bergerak berlawanan arah tick) tidak terbalik atas-bawahnya.
-// Kalau harga kini tidak diketahui (posisi sudah ditutup) atau rentangnya di luar
-// batas yang diterima halaman itu, yang dibawa cuma poolnya.
+// The "Copy manually" link: the target position is carried to the manual LP page with the pool and
+// its range already filled in. The range is translated into that page's language — signed percent
+// of each bound RELATIVE TO THE CURRENT PRICE, not ticks — so a pool quoted in
+// token0 (its price moves opposite to the tick) does not get flipped top-to-bottom.
+// If the current price is unknown (the position is already closed) or the range is outside
+// the bounds that page accepts, only the pool is carried.
 function manualHash(p) {
   const ref = '#manual-lp/' + p.pool_ref;
   const cur = p.curTick == null ? null : tickPrice(p.curTick, p.dec0, p.dec1, p.quoteSide);
@@ -202,22 +202,22 @@ function OurSide({ copy, p, onClose }) {
   const { t } = useI18n();
   if (!copy) return null;
   const ours = copy.positions || [];
-  // Urut kronologis, bukan terbaru di atas seperti tabel lain: yang menjawab
-  // "kenapa tidak ikut" adalah keputusan atas pembukaan posisi — keputusan
-  // sesudahnya ("tidak ada cermin yang cocok" saat target menarik) cuma akibatnya.
+  // Chronological, not newest on top like other tables: what answers
+  // "why it was not followed" is the decision on opening the position — the decision
+  // after it ("no matching mirror" when the target withdrew) is just a consequence.
   const decs = copy.decisions || [];
-  const ditolak = decs.some((d) => d.verdict && d.verdict !== 'copy');
-  // Kenapa tidak ada salinan. Urutannya dari yang paling menjelaskan: wallet ini
-  // memang bukan target > target baru ditambah setelah posisinya dibuka > mesin
-  // memang tidak pernah melihat aksinya > mesin melihat tapi menolak (daftar
-  // alasannya menyusul di bawah).
-  const sebab = !copy.isTarget
+  const rejected = decs.some((d) => d.verdict && d.verdict !== 'copy');
+  // Why there is no copy. Ordered from the most explanatory: this wallet
+  // simply is not a target > the target was added after its position was opened > the engine
+  // never saw its action > the engine saw it but refused (the list of
+  // reasons follows below).
+  const cause = !copy.isTarget
     ? 'Wallet ini bukan target — posisinya hanya diriset, tidak pernah diikuti mesin.'
     : !decs.length
       ? (copy.addedTs && p.opened_ts && copy.addedTs > p.opened_ts
         ? 'Target ini baru ditambahkan setelah posisi ini dibuka, jadi pembukaannya tidak pernah dilihat pemantau.'
         : 'Pemantau tidak mencatat satu aksi pun di posisi ini — kemungkinan terjadi selagi mesin mati dan di luar jangkauan backfill.')
-      : ditolak
+      : rejected
         ? 'Mesin melihat aksinya, tapi tidak menyalinnya:'
         : 'Aksinya tercatat, tapi belum ada keputusan atasnya.';
   return (
@@ -228,7 +228,7 @@ function OurSide({ copy, p, onClose }) {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="text-sm font-medium">{t('Kita tidak menyalin posisi ini')}</div>
-              <p className="mt-1 text-xs text-muted">{t(sebab)}</p>
+              <p className="mt-1 text-xs text-muted">{t(cause)}</p>
               {copy.isTarget && !copy.enabled && (
                 <p className="mt-1 text-xs text-muted">{t('Target ini sedang dimatikan.')}</p>
               )}
@@ -251,7 +251,7 @@ function OurSide({ copy, p, onClose }) {
                   <li key={d.actionId} className="flex flex-col gap-1 text-xs sm:flex-row sm:items-baseline sm:gap-2">
                     <span className="flex shrink-0 items-center gap-1.5">
                       <Chip size="sm" variant="soft" color={v ? v[1] : 'default'}>{v ? t(v[0]) : t('Belum diputuskan')}</Chip>
-                      <span className="text-muted">{t(AKSI[d.kind] || d.kind)}</span>
+                      <span className="text-muted">{t(ACTIONS[d.kind] || d.kind)}</span>
                     </span>
                     <span className="min-w-0 flex-1 break-words">{d.reason ? reason(d.reason) : '—'}</span>
                     <span className="shrink-0 text-muted" title={fmtDate(d.ts)}>{ago(d.ts)}</span>
@@ -267,8 +267,8 @@ function OurSide({ copy, p, onClose }) {
 }
 
 /**
- * p       : baris posisi dari /api/wallet (null = laci tertutup)
- * address : wallet pemiliknya — kejadian diambil per (wallet, token_id)
+ * p       : position row from /api/wallet (null = drawer closed)
+ * address : the owning wallet — events are fetched per (wallet, token_id)
  */
 export default function WalletPositionHistory({ p, address, onClose }) {
   const { t } = useI18n();

@@ -1,5 +1,5 @@
-// Skema form aturan — sumber tunggal untuk halaman Aturan dan aturan per-target.
-// `when` menentukan kapan sebuah field relevan; field yang tidak relevan disembunyikan.
+// Rules form schema — the single source for the Rules page and the per-target rules.
+// `when` decides when a field is relevant; irrelevant fields are hidden.
 export const SCHEMA = [
   { group: 'Ukuran posisi', icon: 'ti-ruler', fields: [
     { path: 'sizing.mode', label: 'Cara menentukan ukuran', type: 'select', options: [

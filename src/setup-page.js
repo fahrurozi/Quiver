@@ -1,21 +1,21 @@
 'use strict';
-// Halaman pemasangan — satu berkas, dirender server, tanpa build.
+// Setup page — a single file, rendered by the server, without a build.
 //
-// Alasannya sama dengan halaman masuk di server.js: saat halaman ini dibutuhkan,
-// `npm ci --prefix web && npm run build --prefix web` belum tentu pernah dijalankan.
-// Jadi tidak ada React, tidak ada impor, tidak ada permintaan aset kedua — bahasa
-// desainnya saja yang diikuti (Inter, kartu datar bergaris, tema terang/gelap dari
+// The reason is the same as the sign-in page in server.js: when this page is needed,
+// `npm ci --prefix web && npm run build --prefix web` has not necessarily ever run.
+// So no React, no imports, no second asset request — only the design language is
+// followed (Inter, flat bordered cards, light/dark theme from
 // localStorage 'lpcopy-theme').
 //
-// Dwibahasa dengan pola yang sama persis dengan dasbor (web/src/i18n.jsx): kalimat
-// Indonesia dipakai sebagai kunci, peta EN di bawah menerjemahkannya. Terjemahan yang
-// terlewat = kalimat Indonesia yang benar, bukan kunci mentah. BEDANYA dengan dasbor:
-// di sini bawaannya INGGRIS, karena orang yang baru memasang belum tentu bisa
-// membaca bahasa Indonesia. Pilihannya disimpan di kunci localStorage yang sama
-// ('lpcopy-lang'), jadi dasbor melanjutkan dengan bahasa yang dipilih di wizard.
+// Bilingual with exactly the same pattern as the dashboard (web/src/i18n.jsx): the Indonesian
+// sentence is used as the key, the EN map below translates it. A missed translation
+// = a correct Indonesian sentence, not a raw key. The DIFFERENCE from the dashboard:
+// here the default is ENGLISH, because someone who has just installed may not be able to
+// read Indonesian. The choice is stored in the same localStorage key
+// ('lpcopy-lang'), so the dashboard continues with the language chosen in the wizard.
 //
-// JS di dalamnya sengaja tanpa template literal supaya berkas ini tetap enak dibaca
-// sebagai satu template literal Node (tidak ada ${…} yang harus di-escape).
+// The JS inside deliberately avoids template literals so this file stays easy to read
+// as a single Node template literal (no ${…} that must be escaped).
 
 const MARK = '<svg width="132" height="24" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 48" role="img" aria-label="QUIVER"><g fill="currentColor" fill-rule="evenodd"><path d="M0 19H26L16 8L24 0L46 24L24 48L16 40L26 30H0ZM43 11L51 3L73 24L51 46L43 38L56 24Z"/><path d="M99 9C88 9 82 15 82 24S88 39 99 39C102 39 105 38 107 37L113 43L118 38L112 32C114 30 115 27 115 24C115 15 109 9 99 9ZM99 15C105 15 108 18 108 24S105 33 99 33S89 30 89 24S93 15 99 15Z M120 10H127V27C127 31 130 33 134 33S141 31 141 27V10H148V27C148 35 143 39 134 39S120 35 120 27Z M154 10H161V38H154Z M166 10H174L183 31L192 10H200L187 38H179Z M204 10H229V16H211V21H227V27H211V32H229V38H204Z M234 10H250C258 10 262 14 262 20C262 24 260 27 256 28L264 38H255L248 29H241V38H234ZM241 16V23H249C253 23 255 22 255 20S253 16 249 16Z"/></g></svg>';
 
@@ -96,7 +96,7 @@ button.sm{height:1.75rem;padding:0 .5rem;font-size:.75rem}
 @keyframes sp{to{transform:rotate(360deg)}}
 `;
 
-// ---- badan halaman --------------------------------------------------------
+// ---- page body --------------------------------------------------------
 const BODY = `
 <main class="shell">
   <div class="top">
@@ -121,7 +121,7 @@ const BODY = `
 </main>`;
 
 const JS = `
-// ---- dwibahasa ------------------------------------------------------------
+// ---- bilingual ------------------------------------------------------
 var EN = {
   "pemasangan": "setup",
   "Quiver — pemasangan": "Quiver — setup",
@@ -283,7 +283,7 @@ var EN = {
   "menunggu dasbor di {u}": "waiting for the dashboard at {u}",
   "Dasbor belum menjawab. Lihat log di terminal, lalu buka {u} sendiri.": "The dashboard is not answering yet. Check the terminal log, then open {u} yourself.",
 
-  // Pesan dari server (setup.js, settings.js probeRpc) — diterjemahkan lewat ts().
+  // Messages from the server (setup.js, settings.js probeRpc) — translated via ts().
   "Kode pemasangan salah. Lihat terminal tempat Quiver dijalankan, atau jalankan: cat data/setup-code.txt": "Wrong setup code. Check the terminal where Quiver was started, or run: cat data/setup-code.txt",
   "terlalu banyak percobaan — tunggu 5 menit": "too many attempts — wait 5 minutes",
   "Kunci privat harus 64 karakter hex (boleh diawali 0x).": "The private key must be 64 hex characters (0x prefix optional).",
@@ -308,7 +308,7 @@ var EN = {
   "host mengarah ke alamat link-local": "the host resolves to a link-local address"
 };
 
-// Bawaan Inggris; pilihan yang pernah disimpan (di sini atau di dasbor) menang.
+// Default English; a choice that was ever stored (here or in the dashboard) wins.
 var LANG = (function () {
   try { var l = localStorage.getItem('lpcopy-lang'); if (l === 'id' || l === 'en') return l; } catch (e) { /* mode privat */ }
   return 'en';
@@ -318,9 +318,9 @@ function t(s, v) {
   if (v) for (var k in v) o = o.split('{' + k + '}').join(v[k]);
   return o;
 }
-// Teks yang datang dari server selalu Indonesia. Yang persis sama diterjemahkan lewat
-// kamus; sisanya (ringkasan uji RPC yang disambung ' · ', pesan dengan sisipan nilai)
-// ditambal per potongan — cukup untuk kalimat yang memang cuma muncul di sini.
+// Text that comes from the server is always Indonesian. Exactly matching text is translated via
+// the dictionary; the rest (RPC test summaries joined with ' · ', messages with inserted values)
+// is patched per fragment — enough for sentences that only appear here.
 function ts(s) {
   if (!s) return '';
   if (LANG !== 'en') return s;
@@ -333,8 +333,8 @@ function ts(s) {
     .replace('URL RPC harus https: ', 'The RPC URL must be https: ')
     .replace('Alamat target tidak valid: ', 'Invalid target address: ');
 }
-// Kunci localStorage yang sama dengan dasbor (web/src/i18n.jsx), jadi bahasa yang
-// dipilih di sini dipakai lagi begitu dasbornya terbuka.
+// The same localStorage key as the dashboard (web/src/i18n.jsx), so the language
+// chosen here is reused as soon as the dashboard opens.
 function setLang(l) {
   LANG = (l === 'id' ? 'id' : 'en');
   try { localStorage.setItem('lpcopy-lang', LANG); } catch (e) { /* mode privat */ }
@@ -351,7 +351,7 @@ var S = {
   chains: {},
   capital: { dry_run: true, fixed_quote_usd: '', min_quote_usd: '', max_quote_per_position_usd: '', max_total_exposure_usd: '', daily_budget_usd: '' },
   targets: [],
-  // Jalur pulihkan: berkas cadangan dari Pengaturan → Cadangan menggantikan semua langkah.
+  // Restore path: a backup file from Settings → Backup replaces all the steps.
   flow: 'new',
   r: { backup: null, name: '', size: 0, parts: { db: true, wallet: true }, password: '', port: '', env: {}, envVars: [], backupPort: null }
 };
@@ -375,7 +375,7 @@ function api(path, body) {
   }).then(function (r) { return r.json().catch(function () { return { error: t('balasan server tidak terbaca') }; }); });
 }
 
-// ---- panel ---------------------------------------------------------------
+// ---- panel ---------------------------------------------------------
 function paneMulai() {
   return '<h2>' + t('Selamat datang di Quiver') + '</h2>'
     + '<p class="lede">' + t('Beberapa langkah untuk menyiapkan wallet, token akses, chain, dan batas modal. Semuanya bisa diubah lagi nanti dari halaman Pengaturan.') + '</p>'
@@ -392,8 +392,8 @@ function pilihFlow(v, judul, ket) {
     + '<span><span class="t">' + t(judul) + '</span><span class="d">' + t(ket) + '</span></span></label>';
 }
 function selCurrency() {
-  // Nama mata uang datang dari server dalam dua bahasa (fx.js CURRENCIES/_EN); kode
-  // ISO-nya yang jadi pegangan, namanya cuma keterangan.
+  // Currency names come from the server in two languages (fx.js CURRENCIES/_EN); the ISO
+  // code is the reference, the name is only a label.
   var o = '<option value="">' + t('— dolar saja —') + '</option>';
   for (var i = 0; i < S.st.currencies.length; i++) {
     var c = S.st.currencies[i];
@@ -598,7 +598,7 @@ var PANES_R = [paneMulai, panePulih];
 function panes() { return S.flow === 'restore' ? PANES_R : PANES; }
 function titles() { return S.flow === 'restore' ? TITLES_R : TITLES; }
 
-// ---- kerangka -------------------------------------------------------------
+// ---- frame -------------------------------------------------------------
 function render() {
   var d = '';
   var PS = panes();
@@ -617,9 +617,9 @@ function render() {
   if (f && S.i > 0) f.focus();
 }
 
-// Dipasang SEKALI. render() cuma mengganti innerHTML #body, elemennya sendiri tetap,
-// jadi penyimak tertempel di sini bertahan — dan tidak menumpuk tiap render (dulu satu
-// klik "Tambah wallet" menambah sebanyak jumlah render yang sudah terjadi).
+// Mounted ONCE. render() only replaces the innerHTML of #body, the element itself stays,
+// so a listener attached here survives — and does not pile up on each render (one
+// click of "Add wallet" used to add as many as the number of renders that had happened).
 function wire() {
   var b = $('#body');
   b.addEventListener('input', function (e) {
@@ -716,15 +716,15 @@ function ujiEp(k, btn) {
     else {
       e.res = r.summary;
       e.resKind = r.usable ? 'ok' : 'bad';
-      // Bendera yang disarankan pengujian dipakai langsung — persis yang dilakukan
-      // halaman Pengaturan setelah tombol Uji.
+      // The flag suggested by the test is used directly — exactly what the
+      // Settings page does after the Test button.
       if (r.suggest) { e.no_logs = !!r.suggest.no_logs; e.max_log_blocks = r.suggest.max_log_blocks || 0; e.archive = !!r.suggest.archive; }
     }
     render();
   });
 }
 
-// ---- pindah langkah -------------------------------------------------------
+// ---- moving between steps -------------------------------------------------------
 function periksa() {
   if (S.i === 0) {
     if (!S.code) return 'Tempel kode pemasangan dulu.';
@@ -830,8 +830,8 @@ function simpan() {
   }).catch(function (e) { $('#next').disabled = false; $('#back').disabled = false; say('bad', esc(String(e))); });
 }
 
-// Berkas dibaca di peramban (pratinjau tanpa mengunggah); server hanya ditanya bagian
-// config-nya: variabel .env apa yang dirujuk dan belum ada di mesin ini.
+// The file is read in the browser (preview without uploading); the server is only asked about the
+// config part: which .env variables it references that do not exist on this machine.
 function bacaCadangan(f) {
   var R = S.r;
   R.backup = null; R.name = ''; R.size = 0; R.envVars = []; R.backupPort = null;
@@ -869,10 +869,10 @@ function pulihkan() {
   }).catch(function (e) { $('#next').disabled = false; $('#back').disabled = false; say('bad', esc(String(e))); });
 }
 
-// Server pemasangan mati sesaat setelah berkas ditulis; begitu /api/setup/ping tidak
-// lagi menjawab {setup:true}, yang mendengarkan port itu sudah dasbornya. Alamat
-// tujuan dibangun dari hostname peramban (bukan host di config) supaya tetap benar
-// lewat tunnel, dan portnya dari config yang baru ditulis.
+// The setup server stops a moment after the files are written; once /api/setup/ping no
+// longer answers {setup:true}, whatever listens on that port is already the dashboard. The destination
+// address is built from the browser's hostname (not the host in the config) so it stays correct
+// through a tunnel, and the port from the freshly written config.
 function tunggu(r) {
   var tujuan = r.samePort ? '/' : location.protocol + '//' + location.hostname + ':' + r.port + '/';
   var ping = r.samePort ? '/api/setup/ping' : tujuan + 'api/setup/ping';
@@ -884,8 +884,8 @@ function tunggu(r) {
   $('#back').style.display = 'none';
   var mulai = Date.now();
   var tik = setInterval(function () {
-    // Port lain = asal lain: fetch-nya pasti ditolak CORS, jadi di sana kita hanya
-    // menunggu sebentar lalu pindah — dasbornya yang menjawab, bukan kita.
+    // Another port = another origin: the fetch is certain to be rejected by CORS, so there we only
+    // wait briefly then move on — it is the dashboard that answers, not us.
     if (!r.samePort) {
       if (Date.now() - mulai > 4000) { clearInterval(tik); location.href = tujuan; }
       return;
@@ -894,7 +894,7 @@ function tunggu(r) {
       .then(function (res) { return res.json().catch(function () { return {}; }); })
       .then(function (j) { if (!j.setup) { clearInterval(tik); location.href = tujuan; } })
       .catch(function () {
-        // Port sedang berpindah tangan dari wizard ke dasbor — belum tentu gagal.
+        // The port is changing hands from the wizard to the dashboard — not necessarily a failure.
         if (Date.now() - mulai > 60000) {
           clearInterval(tik);
           $('#tunggu').innerHTML = t('Dasbor belum menjawab. Lihat log di terminal, lalu buka {u} sendiri.', { u: '<a href="' + esc(tujuan) + '">' + esc(tujuan) + '</a>' });
@@ -903,8 +903,8 @@ function tunggu(r) {
   }, 1500);
 }
 
-// Enter = tombol utama langkah itu, bukan selalu "Lanjut": di kolom tambah-RPC ia
-// menambahkan endpointnya, di kolom kunci privat ia memeriksa wallet-nya.
+// Enter = the step's primary button, not always "Continue": in the add-RPC field it
+// adds the endpoint, in the private key field it checks the wallet.
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
   e.preventDefault();
@@ -915,8 +915,8 @@ document.addEventListener('keydown', function (e) {
 wire();
 $('#next').addEventListener('click', next);
 $('#back').addEventListener('click', function () { if (S.i > 0) { S.i--; say('', ''); render(); } });
-// Bahasa efektif ikut disimpan walau tombolnya tidak disentuh, supaya dasbor terbuka
-// dengan bahasa yang sama dengan yang barusan dibaca di sini.
+// The effective language is also stored even if its button was not touched, so the dashboard opens
+// with the same language as the one just read here.
 setLang(LANG);
 `;
 

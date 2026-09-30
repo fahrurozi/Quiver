@@ -9,11 +9,11 @@ import TokenIcon, { TokenSym } from '../components/TokenIcon';
 import { usd, num, pct, short, ago, TXSTATUS } from '../fmt';
 import { useI18n } from '../i18n';
 
-const PORSI = [['25%', '25%'], ['50%', '50%'], ['75%', '75%'], ['semua', 'Maks']];
+const PORTION = [['25%', '25%'], ['50%', '50%'], ['75%', '75%'], ['semua', 'Maks']];
 const isAddr = (a) => /^0x[0-9a-f]{40}$/.test(a);
 
-// Satu baris token di pemilih: lambang, simbol (+ penanda "manual"), alamat singkat,
-// saldo dan nilainya di kanan.
+// One token row in the picker: icon, symbol (+ "manual" marker), short address,
+// balance and its value on the right.
 function TokenRow({ x, onPick, disabled }) {
   const { t } = useI18n();
   return (
@@ -35,42 +35,42 @@ function TokenRow({ x, onPick, disabled }) {
   );
 }
 
-// Pemilih token ala dompet: tombolnya cukup lambang + simbol, dialognya punya kotak
-// cari yang juga menerima alamat 0x… — token yang belum dikenal bisa ditambahkan
-// dari situ tanpa harus pernah jadi posisi dulu.
+// A wallet-style token picker: the button is just icon + symbol, the dialog has a search
+// box that also accepts 0x… addresses — a token not yet known can be added
+// from there without ever having been a position.
 function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [cek, setCek] = useState(null);   // hasil /api/address untuk alamat yang ditempel
-  const [tambah, setTambah] = useState(false);
+  const [check, setCheck] = useState(null);   // the /api/address result for the pasted address
+  const [add, setAdd] = useState(false);
   const cur = all.find((x) => x.address === value);
   const qq = q.trim().toLowerCase();
 
   const shown = useMemo(() => (qq
     ? list.filter((x) => x.symbol.toLowerCase().includes(qq) || x.address.includes(qq))
     : list), [list, qq]);
-  // Alamat yang ditempel tapi tidak ada di daftar sisi ini. Kalau tokennya sudah
-  // dikenal (mis. saldo kosong di sisi "dari"), tidak perlu ditanyakan ke chain.
+  // An address that was pasted but is not in this side's list. If the token is already
+  // known (e.g. an empty balance on the "from" side), there is no need to ask the chain.
   const known = isAddr(qq) ? all.find((x) => x.address === qq) : null;
-  const perluCek = isAddr(qq) && !shown.length && !known;
+  const needsCheck = isAddr(qq) && !shown.length && !known;
 
   useEffect(() => {
-    setCek(null);
-    if (!perluCek) return;
+    setCheck(null);
+    if (!needsCheck) return;
     let alive = true;
-    setCek({ loading: true });
-    get(`/api/address?a=${qq}`).then((r) => { if (alive) setCek(r); }).catch((e) => alive && setCek({ error: e.message }));
+    setCheck({ loading: true });
+    get(`/api/address?a=${qq}`).then((r) => { if (alive) setCheck(r); }).catch((e) => alive && setCheck({ error: e.message }));
     return () => { alive = false; };
-  }, [qq, perluCek]);
+  }, [qq, needsCheck]);
 
-  const tutup = () => { setOpen(false); setQ(''); setCek(null); };
-  const pilih = (a) => { onChange(a); tutup(); };
-  const impor = async () => {
-    setTambah(true);
+  const close = () => { setOpen(false); setQ(''); setCheck(null); };
+  const pick = (a) => { onChange(a); close(); };
+  const importKey = async () => {
+    setAdd(true);
     const ok = await onImport(qq, side);
-    setTambah(false);
-    if (ok) tutup();
+    setAdd(false);
+    if (ok) close();
   };
 
   return (
@@ -84,7 +84,7 @@ function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
         <ChevronDown className="size-4 shrink-0 text-muted" />
       </button>
 
-      <Modal isOpen={open} onOpenChange={(o) => { if (!o) tutup(); }}>
+      <Modal isOpen={open} onOpenChange={(o) => { if (!o) close(); }}>
         <Modal.Backdrop isDismissable>
           <Modal.Container size="sm" placement="center">
             <Modal.Dialog className="w-[min(24rem,calc(100vw-2rem))]">
@@ -102,7 +102,7 @@ function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
                 {!qq && side === 'to' && (
                   <div className="flex flex-wrap gap-1.5">
                     {all.filter((x) => x.isQuote).map((x) => (
-                      <button key={x.address} type="button" disabled={x.address === exclude} onClick={() => pilih(x.address)}
+                      <button key={x.address} type="button" disabled={x.address === exclude} onClick={() => pick(x.address)}
                         className={`flex h-8 items-center gap-1.5 rounded-full border pl-1 pr-3 text-sm font-medium transition-colors disabled:opacity-40 ${x.address === value
                           ? 'border-accent bg-accent/10' : 'border-border hover:bg-default'}`}>
                         <TokenIcon address={x.address} symbol={x.symbol} size={22} />{x.symbol}
@@ -113,7 +113,7 @@ function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
 
                 <div className="-mx-1 max-h-[22rem] overflow-y-auto">
                   {shown.map((x) => (
-                    <TokenRow key={x.address} x={x} onPick={pilih} disabled={x.address === exclude} />
+                    <TokenRow key={x.address} x={x} onPick={pick} disabled={x.address === exclude} />
                   ))}
 
                   {!shown.length && known && (
@@ -121,21 +121,21 @@ function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
                       {t('{s} sudah ada di daftar, tapi saldonya kosong — tidak bisa dijadikan sumber swap.', { s: known.symbol })}
                     </div>
                   )}
-                  {!shown.length && perluCek && (
-                    cek?.loading ? (
+                  {!shown.length && needsCheck && (
+                    check?.loading ? (
                       <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted"><Spinner size="sm" color="current" />{t('Memeriksa alamat…')}</div>
-                    ) : cek?.kind === 'token' ? (
+                    ) : check?.kind === 'token' ? (
                       <div className="flex items-center gap-3 rounded-md border border-border p-3">
-                        <TokenIcon address={qq} symbol={cek.symbol} size={30} />
+                        <TokenIcon address={qq} symbol={check.symbol} size={30} />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-semibold">{cek.symbol}</span>
-                          <span className="block truncate text-xs text-muted">{cek.name || short(qq)}</span>
+                          <span className="block truncate font-semibold">{check.symbol}</span>
+                          <span className="block truncate text-xs text-muted">{check.name || short(qq)}</span>
                         </span>
-                        <Button size="sm" onPress={impor} isPending={tambah}><Plus className="size-4" />{t('Tambahkan')}</Button>
+                        <Button size="sm" onPress={importKey} isPending={add}><Plus className="size-4" />{t('Tambahkan')}</Button>
                       </div>
-                    ) : cek ? (
+                    ) : check ? (
                       <div className="px-2.5 py-6 text-center text-sm text-danger">
-                        {cek.error || (cek.kind === 'wallet' ? t('Itu alamat wallet, bukan token.') : t('Kontrak ini bukan token ERC-20.'))}
+                        {check.error || (check.kind === 'wallet' ? t('Itu alamat wallet, bukan token.') : t('Kontrak ini bukan token ERC-20.'))}
                       </div>
                     ) : null
                   )}
@@ -162,51 +162,51 @@ function TokenPicker({ value, onChange, list, all, exclude, side, onImport }) {
   );
 }
 
-// Panel saldo di samping kartu swap: apa saja yang ada di wallet bot, nilainya, dan
-// token manual (yang bisa dihapus lagi). Klik baris = pakai sebagai sisi "dari".
+// Balance panel beside the swap card: what is in the bot wallet, its value, and the
+// manual tokens (which can be removed again). Click a row = use it as the "from" side.
 const PER_HAL = 5;
-// Bernilai = ada harga dan nilainya minimal satu sen; sisanya (tanpa harga / debu)
-// dikumpulkan di bawah supaya aset yang berarti tidak tenggelam di antara memecoin.
-const bernilai = (x) => x.usd != null && x.usd >= 0.01;
-// (Token yang disembunyikan tetap bisa dipilih lewat pemilih token di kartu swap.)
+// Valued = has a price and its value is at least one cent; the rest (no price / dust)
+// are collected below so meaningful assets do not drown among memecoins.
+const valued = (x) => x.usd != null && x.usd >= 0.01;
+// (A hidden token can still be chosen via the token picker in the swap card.)
 
-function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga }) {
+function Holdings({ tokens, dari: from, onUse, onRemove, onImport, harga: price, onRetryPrice }) {
   const { t } = useI18n();
   const [addr, setAddr] = useState('');
-  const [kirim, setKirim] = useState(false);
-  const [sapu, setSapu] = useState(false);
+  const [sendOrig, setSending] = useState(false);
+  const [sweepAll, setSweep] = useState(false);
   const [hal, setHal] = useState(0);
-  const [semua, setSemua] = useState(false);
-  const semuaRows = useMemo(() => tokens.filter((x) => x.amount > 0 || x.custom)
-    .sort((a, b) => (bernilai(b) - bernilai(a)) || (b.usd ?? -1) - (a.usd ?? -1) || b.amount - a.amount), [tokens]);
-  const total = semuaRows.reduce((s, x) => s + (x.usd || 0), 0);
-  const adaHarga = semuaRows.some((x) => x.usd != null);
-  const nBernilai = semuaRows.filter(bernilai).length;
-  // Token tanpa nilai disembunyikan — tapi hanya setelah harga benar-benar terbaca;
-  // selagi memuat atau kalau harga gagal, menyembunyikan berarti panel kosong.
-  const sembunyi = harga === 'ok' && !semua;
-  const rows = sembunyi ? semuaRows.filter(bernilai) : semuaRows;
-  const nTersembunyi = harga === 'ok' ? semuaRows.length - nBernilai : 0;
+  const [every, setAll] = useState(false);
+  const allRows = useMemo(() => tokens.filter((x) => x.amount > 0 || x.custom)
+    .sort((a, b) => (valued(b) - valued(a)) || (b.usd ?? -1) - (a.usd ?? -1) || b.amount - a.amount), [tokens]);
+  const total = allRows.reduce((s, x) => s + (x.usd || 0), 0);
+  const hasPrice = allRows.some((x) => x.usd != null);
+  const nValued = allRows.filter(valued).length;
+  // Tokens without value are hidden — but only after the price has really been read;
+  // while loading or if the price failed, hiding would mean an empty panel.
+  const hide = price === 'ok' && !every;
+  const rows = hide ? allRows.filter(valued) : allRows;
+  const nHidden = price === 'ok' ? allRows.length - nValued : 0;
   const nHal = Math.max(1, Math.ceil(rows.length / PER_HAL));
   const halIni = Math.min(hal, nHal - 1);
-  const dari0 = halIni * PER_HAL;
-  const tampil = rows.slice(dari0, dari0 + PER_HAL);
+  const from0 = halIni * PER_HAL;
+  const shownVal = rows.slice(from0, from0 + PER_HAL);
   const a = addr.trim().toLowerCase();
 
-  const tambah = async () => {
-    setKirim(true);
+  const add = async () => {
+    setSending(true);
     const ok = await onImport(a, 'panel');
-    setKirim(false);
+    setSending(false);
     if (ok) setAddr('');
   };
 
-  // Memasukkan memecoin yang nganggur di wallet ke antrean jual otomatis. Tidak
-  // mengirim transaksi apa pun di sini: yang menjual tetap antreannya, dengan batas
-  // rugi yang sama. Debu di bawah ambang sengaja tidak diantrekan.
-  const sapuSisa = async () => {
-    setSapu(true);
+  // Put idle memecoins in the wallet into the automatic sell queue. No transaction is
+  // sent here: what sells is still the queue, with the same loss
+  // limit. Dust below the threshold is deliberately not queued.
+  const sweepLeftover = async () => {
+    setSweep(true);
     const r = await post('/api/leftovers/sweep', {});
-    setSapu(false);
+    setSweep(false);
     if (r.error) return toast.danger(r.error, { timeout: 12000 });
     if (r.queued?.length) {
       return toast.success(t('{n} token masuk antrean jual', { n: r.queued.length }), {
@@ -225,29 +225,29 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
     <Panel title="Aset di wallet" desc="Klik baris untuk menukarnya."
       action={(
         <span className="flex items-center gap-2">
-          {harga === 'muat' && <Refreshing loading text="Memuat harga…" />}
-          {harga === 'gagal' && (
-            <Button size="sm" variant="ghost" onPress={onRetryHarga} className="text-danger">
+          {price === 'muat' && <Refreshing loading text="Memuat harga…" />}
+          {price === 'gagal' && (
+            <Button size="sm" variant="ghost" onPress={onRetryPrice} className="text-danger">
               <RefreshCw className="size-3.5" />{t('Harga gagal — coba lagi')}
             </Button>
           )}
-          {adaHarga && <span className="num text-sm font-semibold">{usd(total)}</span>}
-          <Button size="sm" variant="outline" onPress={sapuSisa} isPending={sapu}>
+          {hasPrice && <span className="num text-sm font-semibold">{usd(total)}</span>}
+          <Button size="sm" variant="outline" onPress={sweepLeftover} isPending={sweepAll}>
             <Brush className="size-3.5" />{t('Sapu sisa')}
           </Button>
         </span>
       )} bodyClass="p-0">
       {rows.length ? (
         <div className="divide-y divide-border">
-          {tampil.map((x, i) => (
+          {shownVal.map((x, i) => (
             <div key={x.address}>
             {/* pembatas kelompok: baris pertama yang tidak bernilai */}
-            {!sembunyi && harga === 'ok' && nBernilai > 0 && dari0 + i === nBernilai && (
+            {!hide && price === 'ok' && nValued > 0 && from0 + i === nValued && (
               <div className="border-b border-border bg-default/40 px-4 py-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-muted">
-                {t('Tanpa nilai ({n})', { n: nTersembunyi })}
+                {t('Tanpa nilai ({n})', { n: nHidden })}
               </div>
             )}
-            <div className={`group flex items-center gap-3 px-4 py-2.5 text-sm ${x.address === dari ? 'bg-accent/5' : ''}`}>
+            <div className={`group flex items-center gap-3 px-4 py-2.5 text-sm ${x.address === from ? 'bg-accent/5' : ''}`}>
               <button type="button" disabled={!(x.amount > 0)} onClick={() => onUse(x.address)}
                 className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default">
                 <TokenIcon address={x.address} symbol={x.symbol} size={28} />
@@ -257,7 +257,7 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
                     {x.custom && <span className="rounded bg-default px-1.5 py-px text-[0.6875rem] font-medium text-muted">{t('manual')}</span>}
                   </span>
                   <span className="num block truncate text-xs text-muted">
-                    {x.priceUsd != null ? usd(x.priceUsd, x.priceUsd < 1 ? 6 : 2) : harga === 'muat' ? '…' : t('tanpa harga')}
+                    {x.priceUsd != null ? usd(x.priceUsd, x.priceUsd < 1 ? 6 : 2) : price === 'muat' ? '…' : t('tanpa harga')}
                   </span>
                 </span>
                 <span className="shrink-0 text-end">
@@ -275,17 +275,17 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
             </div>
           ))}
         </div>
-      ) : <div className="p-4"><Empty title={nTersembunyi ? 'Tidak ada aset bernilai' : 'Wallet kosong'} /></div>}
+      ) : <div className="p-4"><Empty title={nHidden ? 'Tidak ada aset bernilai' : 'Wallet kosong'} /></div>}
 
-      {(nHal > 1 || nTersembunyi > 0) && (
+      {(nHal > 1 || nHidden > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-muted">
           <span className="flex items-center gap-2">
-            {rows.length > 0 && <span className="num">{t('{a}–{b} dari {n}', { a: dari0 + 1, b: Math.min(dari0 + PER_HAL, rows.length), n: rows.length })}</span>}
-            {nTersembunyi > 0 && (
-              <button type="button" onClick={() => { setSemua((v) => !v); setHal(0); }}
+            {rows.length > 0 && <span className="num">{t('{a}–{b} dari {n}', { a: from0 + 1, b: Math.min(from0 + PER_HAL, rows.length), n: rows.length })}</span>}
+            {nHidden > 0 && (
+              <button type="button" onClick={() => { setAll((v) => !v); setHal(0); }}
                 className="inline-flex items-center gap-1 rounded px-1 text-accent hover:underline">
-                {semua ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-                {semua ? t('Sembunyikan {n} tanpa nilai', { n: nTersembunyi }) : t('Tampilkan {n} tanpa nilai', { n: nTersembunyi })}
+                {every ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                {every ? t('Sembunyikan {n} tanpa nilai', { n: nHidden }) : t('Tampilkan {n} tanpa nilai', { n: nHidden })}
               </button>
             )}
           </span>
@@ -300,10 +300,10 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
       )}
 
       {/* input token manual */}
-      <form className="flex gap-2 border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); if (isAddr(a)) tambah(); }}>
+      <form className="flex gap-2 border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); if (isAddr(a)) add(); }}>
         <Input variant="secondary" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={t('Tambah token: alamat 0x…')}
           aria-label={t('Alamat token')} className="mono min-w-0 flex-1 text-xs" />
-        <Button type="submit" size="sm" variant="outline" className="h-9" isDisabled={!isAddr(a)} isPending={kirim}>
+        <Button type="submit" size="sm" variant="outline" className="h-9" isDisabled={!isAddr(a)} isPending={sendOrig}>
           <Plus className="size-4" />{t('Tambah')}
         </Button>
       </form>
@@ -311,18 +311,18 @@ function Holdings({ tokens, dari, onUse, onRemove, onImport, harga, onRetryHarga
   );
 }
 
-// Riwayat semua tx yang menukar aset, dari tabel txs (lihat src/swaplog.js): swap
-// manual, zap saat membuka LP, jual sisa saat menutup, jual balik token zap yang
-// tidak jadi LP, jual fee, jembatan, isi gas, WETH — plus klaim fee & compound.
-// Baris lama (sebelum token & jumlah ikut dicatat) hanya punya nilai USD-nya.
+// History of all txs that exchange assets, from the txs table (see src/swaplog.js): manual
+// swaps, the zap when opening an LP, leftover sale on close, selling back the zap token that
+// did not become an LP, fee sales, bridge, gas top-up, WETH — plus fee claims & compounds.
+// Old rows (before token & amount were recorded) only have their USD value.
 const STATUS_ICON = { sukses: CircleCheck, pending: Clock, gagal: CircleX };
-// Nama DEX dari Kyber datang mentah ("uniswapv3", "uniswap-v4"); rapikan yang dikenal saja.
+// DEX names from Kyber arrive raw ("uniswapv3", "uniswap-v4"); tidy up only the known ones.
 const dexName = (s) => String(s).replace(/^uniswap-?v(\d)$/i, 'Uniswap v$1').replace(/^kyberswap.*/i, 'KyberSwap');
 const STATUS_CLS = {
   sukses: 'bg-success/10 text-success', pending: 'bg-warning/10 text-warning', gagal: 'bg-danger/10 text-danger',
 };
-// Dari mana swap itu datang: [label, penjelasan, warna lencana].
-const METODE = {
+// Where the swap came from: [label, explanation, badge colour].
+const METHOD = {
   manual: ['Manual', 'Dikirim dari halaman ini atau bot Telegram', 'bg-accent/10 text-accent'],
   zap: ['Buka LP', 'Zap: membeli sisi token supaya posisi LP bisa dibuka', 'bg-success/10 text-success'],
   exit: ['Tutup LP', 'Menjual token sisa hasil menutup posisi', 'bg-warning/10 text-warning'],
@@ -349,12 +349,12 @@ function SwapRow({ x }) {
   const { t } = useI18n();
   const d = x.detail || {};
   const st = TXSTATUS[x.status];
-  const Ikon = STATUS_ICON[x.status] || Clock;
+  const Icon = STATUS_ICON[x.status] || Clock;
   const cls = STATUS_CLS[x.status] || 'bg-default text-muted';
-  const m = METODE[x.method];
+  const m = METHOD[x.method];
   const c = x.claim;
-  // Selisih nilai: berapa persen yang hilang (atau didapat) antara nilai masuk dan keluar.
-  const selisih = d.usdIn > 0 && d.usdOut != null ? ((d.usdOut - d.usdIn) / d.usdIn) * 100 : null;
+  // Value difference: what percent was lost (or gained) between the value in and out.
+  const diff = d.usdIn > 0 && d.usdOut != null ? ((d.usdOut - d.usdIn) / d.usdIn) * 100 : null;
   const meta = [
     m && (
       <span key="m" title={t(m[1])} className={`rounded px-1.5 py-px text-[0.6875rem] font-medium ${m[2]}`}>{t(m[0])}</span>
@@ -366,29 +366,29 @@ function SwapRow({ x }) {
     ),
     (d.usdIn != null && d.usdOut != null) ? <span key="usd" className="num">{usd(d.usdIn)} → {usd(d.usdOut)}</span>
       : (d.usdIn ?? d.usdOut) != null && <span key="usd" className="num">≈ {usd(d.usdIn ?? d.usdOut)}</span>,
-    selisih != null && Math.abs(selisih) >= 0.05 && (
-      <span key="pct" className={`num ${selisih < -1 ? 'text-danger' : selisih > 0 ? 'text-success' : ''}`}>{pct(selisih, 2)}</span>
+    diff != null && Math.abs(diff) >= 0.05 && (
+      <span key="pct" className={`num ${diff < -1 ? 'text-danger' : diff > 0 ? 'text-success' : ''}`}>{pct(diff, 2)}</span>
     ),
   ].filter(Boolean);
-  // Baris kedua: lewat mana swap-nya dan ongkos gasnya.
-  const rute = [
+  // Second row: which route the swap took and its gas cost.
+  const routeVal = [
     x.route === 'pool' && <span key="rt">{t('pool langsung')}</span>,
     x.route === 'kyber' && <span key="rt" className="truncate">{d.dex ? t('Kyber lewat {d}', { d: dexName(d.dex) }) : 'Kyber'}</span>,
     x.gasUsd != null && <span key="gas" className="num">{t('gas {v}', { v: usd(x.gasUsd, x.gasUsd < 0.01 ? 4 : 2) })}</span>,
   ].filter(Boolean);
   const Chip = () => (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium ${cls}`}>
-      <Ikon className="size-3" />{t(st?.[0] || x.status)}
+      <Icon className="size-3" />{t(st?.[0] || x.status)}
     </span>
   );
 
-  let judul;
+  let heading;
   if (c) {
-    // Klaim fee: dua sisi pool yang ditarik, bukan pertukaran.
-    const sisi = [[c.amount0, c.token0, c.symbol0], [c.amount1, c.token1, c.symbol1]].filter(([a]) => a == null || a > 0);
-    judul = (
+    // Fee claim: the two pool sides withdrawn, not an exchange.
+    const sideOf = [[c.amount0, c.token0, c.symbol0], [c.amount1, c.token1, c.symbol1]].filter(([a]) => a == null || a > 0);
+    heading = (
       <>
-        {sisi.map(([a, tok, s], i) => (
+        {sideOf.map(([a, tok, s], i) => (
           <span key={tok} className="whitespace-nowrap">
             {i > 0 && <span className="text-muted">+ </span>}
             {a != null && <><span className="num">{num(a, 6)}</span> </>}<TokenSym address={tok} symbol={s} />
@@ -397,9 +397,9 @@ function SwapRow({ x }) {
       </>
     );
   } else if (x.kind === 'compound') {
-    judul = <span>{t('Compound fee ke posisi')}</span>;
+    heading = <span>{t('Compound fee ke posisi')}</span>;
   } else if (d.symbolIn) {
-    judul = (
+    heading = (
       <>
         <span className="whitespace-nowrap">{d.amountIn != null && <><span className="num">{num(d.amountIn, 6)}</span> </>}<TokenSym address={d.tokenIn} symbol={d.symbolIn} /></span>
         <ArrowRight className="size-3.5 shrink-0 text-muted" />
@@ -408,7 +408,7 @@ function SwapRow({ x }) {
         </span>
       </>
     );
-  } else judul = <span className="num">{d.usdIn != null || d.usdOut != null ? `${usd(d.usdIn)} → ${usd(d.usdOut)}` : t('Swap')}</span>;
+  } else heading = <span className="num">{d.usdIn != null || d.usdOut != null ? `${usd(d.usdIn)} → ${usd(d.usdOut)}` : t('Swap')}</span>;
 
   const iconA = c ? c.token0 : d.tokenIn, iconB = c ? c.token1 : d.tokenOut;
   return (
@@ -420,12 +420,12 @@ function SwapRow({ x }) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">{judul}</div>
-        {[meta, rute].map((baris, j) => baris.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">{heading}</div>
+        {[meta, routeVal].map((row, j) => row.length > 0 && (
           <div key={j} className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted">
             {/* titik pemisah menempel di KANAN tiap butir kecuali terakhir: kalau barisnya
                 patah, tidak ada titik yatim di awal baris baru */}
-            {baris.map((el, i) => <span key={el.key} className="flex min-w-0 items-center gap-1.5">{el}{i < baris.length - 1 && <span aria-hidden="true">·</span>}</span>)}
+            {row.map((el, i) => <span key={el.key} className="flex min-w-0 items-center gap-1.5">{el}{i < row.length - 1 && <span aria-hidden="true">·</span>}</span>)}
           </div>
         ))}
         {x.status === 'gagal' && x.error && (
@@ -449,25 +449,25 @@ function SwapRow({ x }) {
   );
 }
 
-function Riwayat() {
+function History() {
   const { t } = useI18n();
-  const [jenis, setJenis] = useState('');
-  const { data, loading } = usePoll(`/api/manual/swaps?limit=30${jenis ? `&kinds=${jenis}` : ''}`, 15000);
+  const [kindName, setKind] = useState('');
+  const { data, loading } = usePoll(`/api/manual/swaps?limit=30${kindName ? `&kinds=${kindName}` : ''}`, 15000);
   const list = data?.swaps || [];
-  const ringkas = list.reduce((a, x) => (x.status === 'sukses' ? a + 1 : a), 0);
+  const compact = list.reduce((a, x) => (x.status === 'sukses' ? a + 1 : a), 0);
   return (
     <Panel title="Riwayat swap" desc="Swap manual, zap & jual sisa posisi LP, klaim fee, jembatan dan isi gas."
       action={(
         <span className="flex items-center gap-2 text-xs text-muted">
           <Refreshing loading={loading} />
-          {list.length > 0 && <span className="num">{t('{n} sukses', { n: ringkas })}</span>}
+          {list.length > 0 && <span className="num">{t('{n} sukses', { n: compact })}</span>}
           <a href="#activity" className="inline-flex items-center gap-1 text-accent hover:underline">{t('Semua')}<ChevronRight className="size-3" /></a>
         </span>
       )} bodyClass="p-0">
       <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2.5" role="tablist" aria-label={t('Jenis swap')}>
         {FILTER.map(([k, label]) => (
-          <button key={k || 'semua'} type="button" role="tab" aria-selected={jenis === k} onClick={() => setJenis(k)}
-            className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${jenis === k
+          <button key={k || 'semua'} type="button" role="tab" aria-selected={kindName === k} onClick={() => setKind(k)}
+            className={`h-7 rounded-md border px-2.5 text-xs font-medium transition-colors ${kindName === k
               ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted hover:text-foreground'}`}>
             {t(label)}
           </button>
@@ -486,122 +486,122 @@ export default function Swap() {
   const { t } = useI18n();
   const { status, reload: reloadStatus } = useStatus();
   const [tokens, setTokens] = useState(null);
-  const [harga, setHarga] = useState('muat');   // 'muat' | 'ok' | 'gagal'
-  const [dari, setDari] = useState('');
+  const [price, setPrice] = useState('muat');   // 'loading' | 'ok' | 'failed'
+  const [from, setFrom] = useState('');
   const [ke, setKe] = useState('');
-  const [jumlah, setJumlah] = useState('');
-  const [kutip, setKutip] = useState(null);
-  const [ambil, setAmbil] = useState(false);
-  const [konfirm, setKonfirm] = useState(false);
-  const [kirim, setKirim] = useState(false);
-  const [hasil, setHasil] = useState(null);
-  const [balikKurs, setBalikKurs] = useState(false);
+  const [qty, setAmount] = useState('');
+  const [quote, setQuote] = useState(null);
+  const [take, setTake] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [sendOrig, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [flipRate, setFlipRate] = useState(false);
   const seq = useRef(0);
-  const muatSeq = useRef(0);
+  const loadSeq = useRef(0);
 
-  // Saldo dulu (cepat, langsung dari chain), harga USD menyusul — DexScreener bisa
-  // lambat dan halaman tidak perlu menunggunya.
+  // Balances first (fast, straight from the chain), USD prices follow — DexScreener can be
+  // slow and the page need not wait for it.
   const pasang = (list) => {
     setTokens(list);
-    // Pilihan awal: aset dengan saldo terbesar, ditukar ke aset kuotasi yang BERBEDA.
-    // Kalau sisi "ke" dipilih tanpa melihat sisi "dari", keduanya bisa jatuh ke token
-    // yang sama (USDG punya saldo terbesar dan juga kuotasi bawaan) — halaman lalu
-    // diam tanpa kutipan dan tanpa penjelasan.
+    // Initial choice: the asset with the largest balance, swapped to a DIFFERENT quote asset.
+    // If the "to" side is chosen without looking at the "from" side, both can land on the same
+    // token (USDG has the largest balance and is also the default quote) — the page then
+    // goes silent with no quote and no explanation.
     const d0 = list.find((x) => x.amount > 0)?.address || '';
     const k0 = list.find((x) => x.isQuote && x.address !== d0)?.address
       || list.find((x) => x.address !== d0)?.address || '';
-    setDari((v) => v || d0);
+    setFrom((v) => v || d0);
     setKe((v) => v || k0);
   };
-  const muat = async () => {
-    const mine = ++muatSeq.current;
+  const load = async () => {
+    const mine = ++loadSeq.current;
     const d = await get('/api/manual/tokens');
-    if (mine !== muatSeq.current) return d.tokens || [];
+    if (mine !== loadSeq.current) return d.tokens || [];
     pasang(d.tokens || []);
-    muatHarga(d.tokens || [], mine);
+    loadPrice(d.tokens || [], mine);
     return d.tokens || [];
   };
-  // Harga menyusul lewat endpoint sendiri — tidak membaca ulang saldo, jadi RPC
-  // yang sedang dibatasi tidak ikut menghapus semua harga.
-  const muatHarga = async (list, mine = muatSeq.current) => {
+  // Prices follow via their own endpoint — it does not re-read balances, so an RPC
+  // that is being rate limited does not wipe out all the prices.
+  const loadPrice = async (list, mine = loadSeq.current) => {
     const addrs = list.filter((x) => x.amount > 0 || x.isQuote || x.custom).map((x) => x.address);
-    if (!addrs.length) return setHarga('ok');
-    setHarga('muat');
+    if (!addrs.length) return setPrice('ok');
+    setPrice('muat');
     const r = await post('/api/manual/prices', { addresses: addrs });
-    if (mine !== muatSeq.current) return undefined;
-    if (r.error || !r.prices) return setHarga('gagal');
+    if (mine !== loadSeq.current) return undefined;
+    if (r.error || !r.prices) return setPrice('gagal');
     setTokens((cur) => (cur || []).map((x) => {
       if (!(x.address in r.prices)) return x;
       const priceUsd = r.prices[x.address];
       return { ...x, priceUsd, usd: priceUsd != null ? x.amount * priceUsd : null };
     }));
-    return setHarga('ok');
+    return setPrice('ok');
   };
-  useEffect(() => { muat(); }, []);
+  useEffect(() => { load(); }, []);
 
   const byAddr = useMemo(() => new Map((tokens || []).map((x) => [x.address, x])), [tokens]);
-  const tDari = byAddr.get(dari);
+  const tFrom = byAddr.get(from);
   const tKe = byAddr.get(ke);
-  const punya = useMemo(() => (tokens || []).filter((x) => x.amount > 0), [tokens]);
-  const siap = dari && ke && dari !== ke && String(jumlah).trim() !== '';
+  const has = useMemo(() => (tokens || []).filter((x) => x.amount > 0), [tokens]);
+  const ready = from && ke && from !== ke && String(qty).trim() !== '';
 
-  // Kutipan diambil sendiri setiap pilihan berubah; balasan basi dibuang.
+  // The quote is fetched itself every time the choice changes; stale replies are discarded.
   useEffect(() => {
-    setKonfirm(false);
-    if (!siap) { setKutip(null); return; }
+    setConfirm(false);
+    if (!ready) { setQuote(null); return; }
     const mine = ++seq.current;
-    setAmbil(true);
+    setTake(true);
     const id = setTimeout(async () => {
-      const r = await post('/api/manual/swap/quote', { tokenIn: dari, tokenOut: ke, amount: jumlah });
+      const r = await post('/api/manual/swap/quote', { tokenIn: from, tokenOut: ke, amount: qty });
       if (mine !== seq.current) return;
-      setKutip(r); setAmbil(false);
+      setQuote(r); setTake(false);
     }, 450);
     return () => clearTimeout(id);
-  }, [dari, ke, jumlah, siap]);
+  }, [from, ke, qty, ready]);
 
-  const balik = () => { setDari(ke); setKe(dari); setJumlah(''); };
+  const flip = () => { setFrom(ke); setKe(from); setAmount(''); };
 
-  // Token dari alamat yang ditempel. Yang saldonya kosong tidak bisa jadi sumber
-  // swap, jadi di sisi "dari" (dan panel) ia dipasang di sisi "ke" saja.
-  const impor = async (address, side) => {
+  // A token from the pasted address. One with an empty balance cannot be a swap
+  // source, so on the "from" side (and the panel) it is only placed on the "to" side.
+  const importKey = async (address, side) => {
     const r = await post('/api/manual/tokens/add', { address });
     if (r.error) { toast.danger(r.error); return false; }
-    const list = await muat();
+    const list = await load();
     const tk = list.find((x) => x.address === address);
     const sym = tk?.symbol || r.token?.symbol || short(address);
     if (side !== 'to' && tk?.amount > 0) {
-      if (address === ke) setKe(dari);
-      setDari(address);
+      if (address === ke) setKe(from);
+      setFrom(address);
       toast.success(t('{s} ditambahkan', { s: sym }));
     } else {
-      if (address === dari) setDari(ke);
+      if (address === from) setFrom(ke);
       setKe(address);
       toast.success(side === 'to' ? t('{s} ditambahkan', { s: sym })
         : t('{s} ditambahkan — saldonya kosong, jadi dipasang sebagai token tujuan', { s: sym }));
     }
     return true;
   };
-  const hapus = async (x) => {
+  const remove = async (x) => {
     await post('/api/manual/tokens/remove', { address: x.address });
-    // Token yang dihapus bisa hilang dari daftar; pilihan kosong diisi ulang
-    // dengan bawaan oleh muat().
+    // A removed token can vanish from the list; an empty choice is refilled
+    // with the default by load().
     if (x.address === ke) setKe('');
-    if (x.address === dari) setDari('');
-    muat();
+    if (x.address === from) setFrom('');
+    load();
   };
-  const pakai = (a) => {
-    if (a === ke) setKe(dari);
-    setDari(a); setJumlah('');
+  const use = (a) => {
+    if (a === ke) setKe(from);
+    setFrom(a); setAmount('');
   };
 
-  const tukar = async () => {
-    setKirim(true);
-    const r = await post('/api/manual/swap', { tokenIn: dari, tokenOut: ke, amount: jumlah });
-    setKirim(false); setKonfirm(false);
+  const swap = async () => {
+    setSending(true);
+    const r = await post('/api/manual/swap', { tokenIn: from, tokenOut: ke, amount: qty });
+    setSending(false); setConfirm(false);
     if (r.error) return toast.danger(r.error);
-    setHasil(r);
+    setResult(r);
     toast.success(t('Swap selesai'));
-    muat(); reloadStatus();
+    load(); reloadStatus();
   };
 
   const dry = status?.mode?.dry_run !== false;
@@ -610,7 +610,7 @@ export default function Swap() {
 
   if (tokens === null) return (<>{header}<Loading page /></>);
 
-  if (hasil) {
+  if (result) {
     return (
       <>
         {header}
@@ -619,20 +619,20 @@ export default function Swap() {
             <span className="flex size-12 items-center justify-center rounded-full bg-success/15 text-success"><Check className="size-6" /></span>
             <div>
               <div className="text-lg font-semibold">{t('Swap selesai')}</div>
-              <div className="mt-1 text-muted">{hasil.note}</div>
-              {hasil.dex && <div className="text-sm text-muted">{t('lewat {d}', { d: hasil.dex })}</div>}
-              <div className="mono mt-2 text-sm text-muted">{hasil.tx}</div>
+              <div className="mt-1 text-muted">{result.note}</div>
+              {result.dex && <div className="text-sm text-muted">{t('lewat {d}', { d: result.dex })}</div>}
+              <div className="mono mt-2 text-sm text-muted">{result.tx}</div>
             </div>
-            <Button variant="outline" onPress={() => { setHasil(null); setJumlah(''); }}>{t('Tukar lagi')}</Button>
+            <Button variant="outline" onPress={() => { setResult(null); setAmount(''); }}>{t('Tukar lagi')}</Button>
           </Card.Content>
         </Card>
       </>
     );
   }
 
-  // Tidak ada satu pun aset bersaldo: kartu swap-nya tidak bisa dipakai sama sekali,
-  // jadi lebih jujur menjelaskan kenapa daripada memajang field kosong.
-  if (!punya.length) {
+  // Not a single asset with a balance: the swap card cannot be used at all,
+  // so it is more honest to explain why than to display empty fields.
+  if (!has.length) {
     return (
       <>
         {header}
@@ -651,12 +651,12 @@ export default function Swap() {
     );
   }
 
-  const usdIn = kutip && !kutip.error ? kutip.usdIn : (tDari?.priceUsd != null && Number(jumlah) > 0 ? Number(jumlah) * tDari.priceUsd : null);
-  const kurs = kutip && !kutip.error && kutip.amountIn > 0 && kutip.amountOut > 0
-    ? (balikKurs ? `1 ${kutip.symbolOut} = ${num(kutip.amountIn / kutip.amountOut, 6)} ${kutip.symbolIn}`
-      : `1 ${kutip.symbolIn} = ${num(kutip.amountOut / kutip.amountIn, 6)} ${kutip.symbolOut}`)
+  const usdIn = quote && !quote.error ? quote.usdIn : (tFrom?.priceUsd != null && Number(qty) > 0 ? Number(qty) * tFrom.priceUsd : null);
+  const rate = quote && !quote.error && quote.amountIn > 0 && quote.amountOut > 0
+    ? (flipRate ? `1 ${quote.symbolOut} = ${num(quote.amountIn / quote.amountOut, 6)} ${quote.symbolIn}`
+      : `1 ${quote.symbolIn} = ${num(quote.amountOut / quote.amountIn, 6)} ${quote.symbolOut}`)
     : null;
-  const minOut = kutip && !kutip.error && kutip.slippageBps != null ? kutip.amountOut * (1 - kutip.slippageBps / 10000) : null;
+  const minOut = quote && !quote.error && quote.slippageBps != null ? quote.amountOut * (1 - quote.slippageBps / 10000) : null;
 
   return (
     <>
@@ -676,20 +676,20 @@ export default function Swap() {
             <div className="rounded-md bg-default/50 p-4">
               <div className="flex items-center justify-between gap-3 text-xs text-muted">
                 <span className="font-medium">{t('Dari')}</span>
-                {tDari && <span>{t('Saldo')} <span className="num">{num(tDari.amount, 6)}</span></span>}
+                {tFrom && <span>{t('Saldo')} <span className="num">{num(tFrom.amount, 6)}</span></span>}
               </div>
               <div className="mt-2 flex items-center gap-3">
-                <input value={jumlah} onChange={(e) => setJumlah(e.target.value)} placeholder="0" inputMode="decimal"
+                <input value={qty} onChange={(e) => setAmount(e.target.value)} placeholder="0" inputMode="decimal"
                   aria-label={t('Jumlah yang ditukar')}
                   className="num h-10 min-w-0 flex-1 bg-transparent text-[1.75rem] font-semibold tracking-tight outline-none placeholder:text-muted/60" />
-                <TokenPicker side="from" value={dari} onChange={setDari} list={punya} all={tokens} exclude={ke} onImport={impor} />
+                <TokenPicker side="from" value={from} onChange={setFrom} list={has} all={tokens} exclude={ke} onImport={importKey} />
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="num text-xs text-muted">{usdIn != null ? `≈ ${usd(usdIn)}` : ''}</span>
                 <div className="flex flex-wrap justify-end gap-1.5">
-                  {PORSI.map(([v, label]) => (
-                    <button key={v} type="button" onClick={() => setJumlah(v)}
-                      className={`h-6 rounded-md border px-2 text-xs font-medium transition-colors ${jumlah === v
+                  {PORTION.map(([v, label]) => (
+                    <button key={v} type="button" onClick={() => setAmount(v)}
+                      className={`h-6 rounded-md border px-2 text-xs font-medium transition-colors ${qty === v
                         ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted hover:text-foreground'}`}>{t(label)}</button>
                   ))}
                 </div>
@@ -698,7 +698,7 @@ export default function Swap() {
 
             {/* pembalik */}
             <div className="relative z-10 -my-2.5 flex justify-center">
-              <Button size="sm" variant="outline" isIconOnly aria-label={t('Balik arah')} onPress={balik}
+              <Button size="sm" variant="outline" isIconOnly aria-label={t('Balik arah')} onPress={flip}
                 isDisabled={!(tKe?.amount > 0)}
                 className="size-9 rounded-lg! border-4! border-surface! bg-default">
                 <ArrowDownUp className="size-4" />
@@ -712,66 +712,66 @@ export default function Swap() {
                 {tKe && <span>{t('Saldo')} <span className="num">{num(tKe.amount, 6)}</span></span>}
               </div>
               <div className="mt-2 flex items-center gap-3">
-                <div className={`num flex h-10 min-w-0 flex-1 items-center truncate text-[1.75rem] font-semibold tracking-tight ${kutip?.amountOut != null ? '' : 'text-muted/60'}`}>
-                  {ambil ? <Spinner size="sm" /> : kutip?.amountOut != null ? num(kutip.amountOut, 6) : '0'}
+                <div className={`num flex h-10 min-w-0 flex-1 items-center truncate text-[1.75rem] font-semibold tracking-tight ${quote?.amountOut != null ? '' : 'text-muted/60'}`}>
+                  {take ? <Spinner size="sm" /> : quote?.amountOut != null ? num(quote.amountOut, 6) : '0'}
                 </div>
-                <TokenPicker side="to" value={ke} onChange={setKe} list={tokens} all={tokens} exclude={dari} onImport={impor} />
+                <TokenPicker side="to" value={ke} onChange={setKe} list={tokens} all={tokens} exclude={from} onImport={importKey} />
               </div>
-              <div className="num mt-3 h-4 text-xs text-muted">{kutip?.usdOut != null && !ambil ? `≈ ${usd(kutip.usdOut)}` : ''}</div>
+              <div className="num mt-3 h-4 text-xs text-muted">{quote?.usdOut != null && !take ? `≈ ${usd(quote.usdOut)}` : ''}</div>
             </div>
           </Card>
 
-          {siap && kutip?.error && <Notice status="danger" title={t('Tidak bisa dikutip')}>{kutip.error}</Notice>}
+          {ready && quote?.error && <Notice status="danger" title={t('Tidak bisa dikutip')}>{quote.error}</Notice>}
 
-          {kutip && !kutip.error && (
+          {quote && !quote.error && (
             <Card className="gap-0! px-4! py-1.5!">
               <div className="divide-y divide-border">
-                {kurs && (
+                {rate && (
                   <KV label="Kurs">
-                    <button type="button" onClick={() => setBalikKurs((v) => !v)} title={t('Balik kurs')}
-                      className="inline-flex items-center gap-1 hover:text-accent">{kurs}<ArrowDownUp className="size-3 text-muted" /></button>
+                    <button type="button" onClick={() => setFlipRate((v) => !v)} title={t('Balik kurs')}
+                      className="inline-flex items-center gap-1 hover:text-accent">{rate}<ArrowDownUp className="size-3 text-muted" /></button>
                   </KV>
                 )}
-                <KV label="Dikirim">{num(kutip.amountIn, 6)} {kutip.symbolIn}</KV>
-                <KV label="Diterima">{num(kutip.amountOut, 6)} {kutip.symbolOut}</KV>
+                <KV label="Dikirim">{num(quote.amountIn, 6)} {quote.symbolIn}</KV>
+                <KV label="Diterima">{num(quote.amountOut, 6)} {quote.symbolOut}</KV>
                 {minOut != null && (
                   <KV label="Minimal diterima">
-                    {num(minOut, 6)} {kutip.symbolOut}
-                    <span className="font-normal text-muted"> · {t('slippage {p}%', { p: num(kutip.slippageBps / 100, 2) })}</span>
+                    {num(minOut, 6)} {quote.symbolOut}
+                    <span className="font-normal text-muted"> · {t('slippage {p}%', { p: num(quote.slippageBps / 100, 2) })}</span>
                   </KV>
                 )}
-                <KV label="Nilai">{usd(kutip.usdIn)} → {usd(kutip.usdOut)}</KV>
-                <KV label="Biaya rute"><span className={kutip.tooLossy ? 'text-danger' : kutip.lossBps > 300 ? 'text-warning' : ''}>
-                  {kutip.lossBps != null ? `${num(kutip.lossBps / 100, 2)}%` : '—'}</span></KV>
-                {kutip.dex && <KV label="Lewat"><span className="font-normal text-muted">{kutip.dex}</span></KV>}
+                <KV label="Nilai">{usd(quote.usdIn)} → {usd(quote.usdOut)}</KV>
+                <KV label="Biaya rute"><span className={quote.tooLossy ? 'text-danger' : quote.lossBps > 300 ? 'text-warning' : ''}>
+                  {quote.lossBps != null ? `${num(quote.lossBps / 100, 2)}%` : '—'}</span></KV>
+                {quote.dex && <KV label="Lewat"><span className="font-normal text-muted">{quote.dex}</span></KV>}
               </div>
             </Card>
           )}
 
-          {kutip?.tooLossy && (
+          {quote?.tooLossy && (
             <div className="flex items-start gap-2 rounded-md bg-danger/10 p-3 text-sm text-danger">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               <span>{t('Rute ini rugi {a}%, di atas batas {b}%. Kecilkan jumlahnya, atau naikkan batas di Aturan → Keluar posisi.', {
-                a: num(kutip.lossBps / 100, 1), b: num(kutip.maxLossBps / 100, 1),
+                a: num(quote.lossBps / 100, 1), b: num(quote.maxLossBps / 100, 1),
               })}</span>
             </div>
           )}
 
           {dry ? (
             <Button size="lg" variant="outline" className="w-full" onPress={() => { location.hash = 'settings'; }}>{t('Nyalakan LIVE dulu')}</Button>
-          ) : !konfirm ? (
-            <Button size="lg" className="w-full" isDisabled={!kutip || !!kutip.error || kutip.tooLossy} onPress={() => setKonfirm(true)}>
+          ) : !confirm ? (
+            <Button size="lg" className="w-full" isDisabled={!quote || !!quote.error || quote.tooLossy} onPress={() => setConfirm(true)}>
               {t('Tukar')}
             </Button>
           ) : (
             <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
               <div className="text-sm font-medium">{t('Kirim transaksi sungguhan?')}</div>
               <div className="text-sm text-muted">
-                {num(kutip.amountIn, 6)} {kutip.symbolIn} → ±{num(kutip.amountOut, 6)} {kutip.symbolOut}
+                {num(quote.amountIn, 6)} {quote.symbolIn} → ±{num(quote.amountOut, 6)} {quote.symbolOut}
               </div>
               <div className="flex gap-2">
-                <Button className="flex-1" onPress={tukar} isPending={kirim}>{t('Ya, tukar sekarang')}</Button>
-                <Button variant="outline" onPress={() => setKonfirm(false)}>{t('Batal')}</Button>
+                <Button className="flex-1" onPress={swap} isPending={sendOrig}>{t('Ya, tukar sekarang')}</Button>
+                <Button variant="outline" onPress={() => setConfirm(false)}>{t('Batal')}</Button>
               </div>
             </div>
           )}
@@ -779,9 +779,9 @@ export default function Swap() {
 
         {/* kolom kanan: saldo + riwayat */}
         <div className="flex min-w-0 flex-col gap-4">
-          <Holdings tokens={tokens} dari={dari} onUse={pakai} onRemove={hapus} onImport={impor}
-            harga={harga} onRetryHarga={() => muatHarga(tokens || [])} />
-          <Riwayat />
+          <Holdings tokens={tokens} dari={from} onUse={use} onRemove={remove} onImport={importKey}
+            harga={price} onRetryPrice={() => loadPrice(tokens || [])} />
+          <History />
         </div>
       </div>
     </>

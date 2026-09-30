@@ -5,14 +5,14 @@ import { ask } from './components/ui';
 import { useI18n, reason } from './i18n';
 import { usd, short } from './fmt';
 
-// Sisi memecoin dan sisi kuotasi posisi, untuk kalimat "jual MEME ke USDG".
+// The memecoin side and the quote side of the position, for the sentence "sell MEME to USDG".
 const sides = (p) => {
   const q = p.quoteSide === 1 ? 1 : 0;
   return { meme: (q === 0 ? p.symbol1 : p.symbol0) || 'token', quote: (q === 0 ? p.symbol0 : p.symbol1) || 'USDG' };
 };
 
-// Isi dialog klaim: centangnya punya state sendiri (ask() hanya menggambar body sekali),
-// dan pilihannya dikabarkan ke pemanggil lewat onChange.
+// Body of the claim dialog: the checkbox has its own state (ask() only draws the body once),
+// and the choice is reported to the caller through onChange.
 function ClaimBody({ p, initial, onChange }) {
   const { t } = useI18n();
   const [sell, setSell] = useState(initial);
@@ -40,7 +40,7 @@ export function useClaimFees(reload) {
     if (lock.current) return;
     lock.current = true;
     try {
-      // Bawaan centang = setelan panen posisi ini (mode klaim + jual fee), kalau aktif.
+      // Checkbox default = this position's harvest settings (claim mode + sell fees), if enabled.
       const c = p.compound;
       let sell = !!(c?.enabled && c.mode === 'claim' && c.sellFee);
       if (!await ask({ title: t('Claim fee'), body: <ClaimBody p={p} initial={sell} onChange={(v) => { sell = v; }} />,

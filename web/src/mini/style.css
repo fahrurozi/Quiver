@@ -1,12 +1,12 @@
-/* Tampilan mini app Telegram — kulit yang sama dengan dasbor.
+/* Telegram mini app view — the same skin as the dashboard.
  *
- * Warnanya BUKAN warna tema Telegram, melainkan token dasbor (web/src/index.css +
- * HeroUI) yang disalin apa adanya: nilai oklch di bawah diambil dari getComputedStyle
- * dasbor yang sudah jadi, terang dan gelap. Yang diikuti dari Telegram cuma satu hal —
- * terang atau gelap — supaya mini app tidak menyala putih di aplikasi yang bertema gelap.
+ * Its colours are NOT Telegram theme colours, but the dashboard tokens (web/src/index.css +
+ * HeroUI) copied as they are: the oklch values below were taken from getComputedStyle
+ * of the finished dashboard, light and dark. The one thing followed from Telegram is
+ * light or dark — so the mini app does not glare white in an app with a dark theme.
  *
- * Salinan, bukan impor: entri 'mini' harus berdiri sendiri (lihat vite.config.js), jadi
- * kalau token dasbor berubah, nilai di sini ikut diubah tangan.
+ * A copy, not an import: the 'mini' entry must stand alone (see vite.config.js), so
+ * if the dashboard tokens change, the values here must be changed by hand.
  */
 @font-face {
   font-family: 'Inter';
@@ -40,7 +40,7 @@ body.dark {
   --warning: oklch(0.79 0.13 70);
 }
 
-/* Akar 15px, sama dengan dasbor: seluruh ukuran di bawah ikut skala itu. */
+/* Root 15px, the same as the dashboard: all sizes below follow that scale. */
 html { font-size: 15px; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
@@ -64,7 +64,7 @@ body {
 .xs { font-size: 0.75rem; }
 .sm { font-size: 0.8125rem; }
 
-/* ---- kerangka ---------------------------------------------------------- */
+/* ---- frame ------------------------------------------------------------- */
 #app { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 
 header.top {
@@ -83,7 +83,7 @@ header.top .eye[aria-pressed="true"] { color: var(--foreground); }
 
 main { flex: 1; padding: 0.75rem 1rem calc(4.75rem + env(safe-area-inset-bottom, 0px)); }
 
-/* Judul halaman: kelompok kecil di atas nama halaman, sama dengan PageHeader dasbor. */
+/* Page title: a small group above the page name, the same as the dashboard's PageHeader. */
 .pagehead { margin: 0.25rem 0 0.75rem; }
 .pagehead .group { font-size: 0.6875rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .pagehead h1 { margin: 0.125rem 0 0; font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; }
@@ -104,7 +104,7 @@ nav.tabs button {
 nav.tabs button svg { width: 1.25rem; height: 1.25rem; stroke: currentColor; fill: none; stroke-width: 1.7; }
 nav.tabs button.on { color: var(--accent); }
 
-/* ---- kartu & panel (web/src/index.css: .card) ---------------------------- */
+/* ---- cards & panels (web/src/index.css: .card) --------------------------- */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -134,7 +134,7 @@ nav.tabs button.on { color: var(--accent); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
 .grid2 .card { margin: 0; }
 
-/* ---- chip (dasbor: radius = --radius, bukan pil) ------------------------- */
+/* ---- chip (dashboard: radius = --radius, not a pill) --------------------- */
 .chip {
   display: inline-flex; align-items: center; gap: 0.375rem;
   border-radius: 0.375rem; padding: 0.125rem 0.4375rem;
@@ -148,14 +148,14 @@ nav.tabs button.on { color: var(--accent); }
 .chip.acc { background: color-mix(in oklab, var(--accent) 12%, transparent); color: var(--accent); }
 
 .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; display: inline-block; }
-/* Denyut hanya saat LIVE — satu-satunya keadaan yang memindahkan uang (App.jsx). */
+/* Pulse only when LIVE — the only state that moves money (App.jsx). */
 .mode { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; font-weight: 500; }
 .mode .pulse { position: relative; display: flex; width: 0.5rem; height: 0.5rem; }
 .mode .pulse i { position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: 0.5; animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
 .mode .pulse b { position: relative; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
 @keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
 
-/* ---- segmented (dasbor: Segmented) -------------------------------------- */
+/* ---- segmented (dashboard: Segmented) ----------------------------------- */
 .seg {
   display: inline-flex; gap: 0.125rem; padding: 0.1875rem;
   border: 1px solid var(--border); border-radius: 0.5625rem; background: var(--surface);
@@ -168,7 +168,7 @@ nav.tabs button.on { color: var(--accent); }
 .seg button.on { background: var(--default); color: var(--foreground); }
 .seg .n { color: var(--muted); font-size: 0.6875rem; margin-left: 0.25rem; }
 
-/* ---- baris daftar (dasbor: tabel, baris bergaris + zebra) ---------------- */
+/* ---- list rows (dashboard: table, ruled rows + zebra) -------------------- */
 .row {
   display: flex; align-items: center; gap: 0.625rem;
   padding: 0.75rem 1rem; width: 100%; text-align: left;
@@ -185,7 +185,7 @@ nav.tabs button.on { color: var(--accent); }
 .meta { font-size: 0.75rem; color: var(--muted); margin-top: 0.125rem; display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; }
 .meta .sep { opacity: 0.55; }
 
-/* Dua lambang token bertumpuk — padanan TokenPair di dasbor. */
+/* Two stacked token icons — the equivalent of TokenPair on the dashboard. */
 .icons { display: flex; align-items: center; flex-shrink: 0; }
 .icons span, .icons img {
   width: 1.375rem; height: 1.375rem; border-radius: 50%;
@@ -195,7 +195,7 @@ nav.tabs button.on { color: var(--accent); }
 }
 .icons > :nth-child(2) { margin-left: -0.4375rem; }
 
-/* ---- tombol ------------------------------------------------------------- */
+/* ---- buttons ------------------------------------------------------------ */
 .btns { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 button.act {
   flex: 1; appearance: none; border: 1px solid var(--border); border-radius: 0.5625rem;
@@ -207,7 +207,7 @@ button.act.danger { color: var(--danger); border-color: color-mix(in oklab, var(
 button.act[disabled] { opacity: 0.45; }
 button.act:active { background: color-mix(in oklab, var(--foreground) 4%, var(--surface)); }
 
-/* ---- isi kartu kecil ---------------------------------------------------- */
+/* ---- small card contents ------------------------------------------------ */
 .kv { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
 .kv:last-child { border-bottom: 0; }
 .kv .k { color: var(--muted); }
@@ -220,7 +220,7 @@ button.act:active { background: color-mix(in oklab, var(--foreground) 4%, var(--
   color: var(--danger); border-radius: 0.5rem; padding: 0.625rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.8125rem;
 }
 
-/* ---- grafik pertumbuhan ------------------------------------------------- */
+/* ---- growth chart ------------------------------------------------------- */
 .chart { display: block; width: 100%; height: 8.5rem; overflow: visible; }
 .chart path.line { fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .chart path.area { stroke: none; opacity: 0.12; }

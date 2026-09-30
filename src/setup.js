@@ -1,22 +1,22 @@
 'use strict';
-// Pemasangan awal — satu-satunya jalan dari "git clone" ke bot yang jalan, tanpa
-// menyunting JSON dengan tangan.
+// Initial setup — the only way from "git clone" to a running bot, without
+// editing JSON by hand.
 //
-// Dipanggil index.js SEBELUM config dibaca: kalau config.json belum ada (atau
-// pemasangan dipaksa lewat `lp setup` / LPCOPY_SETUP=1), di sini dinyalakan server
-// kecil berisi wizard, dan boot normal menunggu sampai orangnya selesai. Setelah
-// berkas ditulis, server ini ditutup dan proses yang sama lanjut menyalakan bot —
-// tidak perlu restart.
+// Called by index.js BEFORE the config is read: if config.json does not exist (or
+// setup is forced via `lp setup` / LPCOPY_SETUP=1), a small server with a wizard is started here,
+// and the normal boot waits until the person is done. After the
+// files are written, this server is closed and the same process goes on to start the bot —
+// no restart needed.
 //
-// Pembagian tempat menyimpan (mengikuti aturan yang sudah dipakai env.js):
-//   rahasia (token dasbor, token bot, API key)  -> .env, mode 600
-//   kunci privat wallet                         -> wallet.key_file (~/.lpcopy/key), 600
-//   sisanya (port, chain, RPC, aturan, target)  -> config.json, 600
-// Kunci privat sengaja TIDAK ke .env: LPCOPY_PRIVATE_KEY mematikan tombol ganti/lepas
-// wallet di dasbor, dan orang yang baru memasang belum tentu tahu itu.
+// Where things are stored (following the rule already used by env.js):
+//   secrets (dashboard token, bot token, API key)  -> .env, mode 600
+//   wallet private key                             -> wallet.key_file (~/.lpcopy/key), 600
+//   the rest (port, chain, RPC, rules, targets)    -> config.json, 600
+// The private key is deliberately NOT put in .env: LPCOPY_PRIVATE_KEY disables the replace/detach
+// wallet buttons on the dashboard, and someone who has just installed may not know that.
 //
-// Halaman wizard-nya dirender server (src/setup-page.js), mandiri tanpa build —
-// `npm ci && npm start` di mesin kosong sudah cukup, web/dist belum perlu ada.
+// The wizard page is rendered by the server (src/setup-page.js), standalone without a build —
+// `npm ci && npm start` on an empty machine is enough, web/dist need not exist yet.
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -33,21 +33,21 @@ const os = require('node:os');
 
 const SETUP_VERSION = 1;
 
-// Pemasangan dijalankan kalau config.json belum ada, atau diminta sendiri. Config
-// yang SUDAH ada tidak pernah memicu wizard sendiri — instance lama yang dipasang
-// sebelum wizard ini ada tidak boleh tiba-tiba mendarat di halaman pemasangan.
+// Setup runs if config.json does not exist, or it is requested explicitly. A config
+// that ALREADY exists never triggers the wizard by itself — an old instance installed
+// before this wizard existed must not suddenly land on the setup page.
 function setupNeeded({ cfgPath, cmd = null, env = process.env }) {
   if (cmd === 'setup' || env.LPCOPY_SETUP === '1') return true;
   return !fs.existsSync(cfgPath);
 }
 
-// Instance yang SUDAH pernah jalan lalu kehilangan config.json bukan pemasangan baru —
-// itu kecelakaan (salah hapus, rsync salah sasaran). Menyajikan wizard di sana berarti
-// pm2 melaporkan "online" padahal bot mati, dan satu klik "Simpan" menindih config lama
-// di atas database yang sudah berisi posisi. Jadi: berhenti keras, kecuali pemasangan
-// memang diminta sendiri (`lp setup` / LPCOPY_SETUP=1).
-function pemasanganTerhalang({ root, cfgPath, diminta = false, dbPath = null }) {
-  if (diminta) return null;
+// An instance that HAS run before and then lost config.json is not a fresh install —
+// it is an accident (deleted by mistake, rsync aimed wrong). Serving the wizard there means
+// pm2 reports "online" while the bot is dead, and one click of "Save" overwrites the old config
+// on top of a database that already contains positions. So: a hard stop, unless setup
+// is explicitly requested (`lp setup` / LPCOPY_SETUP=1).
+function setupBlocked({ root, cfgPath, requested = false, dbPath = null }) {
+  if (requested) return null;
   if (fs.existsSync(cfgPath)) return null;
   const db = dbPath || path.join(root, 'data', 'lpcopy.db');
   if (!fs.existsSync(db)) return null;
@@ -60,14 +60,14 @@ function pemasanganTerhalang({ root, cfgPath, diminta = false, dbPath = null }) 
   ].join('\n');
 }
 
-// ---- penulis .env ---------------------------------------------------------
-// Nilai yang mengandung spasi/#/kutip diapit kutip ganda supaya parseEnv (env.js)
-// membacanya utuh.
+// ---- .env writer ---------------------------------------------------------
+// Values containing spaces/#/quotes are wrapped in double quotes so parseEnv (env.js)
+// reads them whole.
 const quoteEnv = (v) => (/[\s#'"\\]/.test(v) ? `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : String(v));
 
-// Sisipkan nilai ke isi .env: baris yang sudah ada diganti di tempat (komentar dan
-// urutan berkas contoh tetap utuh), yang belum ada ditambahkan di ujung. Nilai kosong
-// TIDAK menghapus apa pun — wizard yang membiarkan kolom kosong berarti "jangan ubah".
+// Insert values into the .env contents: lines that already exist are replaced in place (comments and
+// the order of the example file stay intact), ones that do not are appended at the end. An empty value
+// does NOT delete anything — a wizard that leaves a field empty means "do not change".
 function upsertEnv(text, vals) {
   let out = String(text || '');
   const tail = [];
@@ -75,8 +75,8 @@ function upsertEnv(text, vals) {
     if (v == null || v === '') continue;
     const line = `${k}=${quoteEnv(v)}`;
     const re = new RegExp(`^(?:export[ \\t]+)?${k}[ \\t]*=.*$`, 'm');
-    // Pengganti berupa fungsi: token bisa berisi $& atau $1 yang akan ditafsirkan
-    // sebagai rujukan tangkapan kalau dioper sebagai string.
+    // The replacement is a function: a token can contain $& or $1, which would be interpreted
+    // as a capture reference if passed as a string.
     if (re.test(out)) out = out.replace(re, () => line);
     else tail.push(line);
   }
@@ -94,11 +94,11 @@ function writeEnvFile({ envPath, examplePath, vals }) {
   try { fs.chmodSync(envPath, 0o600); } catch { /* abaikan */ }
 }
 
-// ---- penulis kunci wallet -------------------------------------------------
+// ---- wallet key writer -------------------------------------------------
 const keyPathOf = (cfg) => String(cfg?.wallet?.key_file || '~/.lpcopy/key').replace(/^~/, process.env.HOME || '');
 
-// Kunci lama tidak pernah ditimpa diam-diam — aturan yang sama dengan halaman
-// Pengaturan: dipindah ke berkas cadangan bertanggal dulu.
+// An old key is never silently overwritten — the same rule as the Settings page:
+// moved to a dated backup file first.
 function writeKeyFile(p, pk) {
   fs.mkdirSync(path.dirname(p), { recursive: true, mode: 0o700 });
   let backup = null;
@@ -111,17 +111,17 @@ function writeKeyFile(p, pk) {
   return backup;
 }
 
-// ---- penyusun config ------------------------------------------------------
+// ---- config builder ------------------------------------------------------
 const numOr = (v, dflt) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : dflt);
 
-// Endpoint dari peramban dibersihkan: hanya kolom yang dikenal, hanya https (atau
-// http ke mesin sendiri untuk node lokal).
+// Endpoints from the browser are sanitised: only known fields, only https (or
+// http to the local machine for a local node).
 function cleanEndpoint(e) {
   const url = String(e?.url || '').trim();
   let u;
   try { u = new URL(url); } catch { throw new Error(`URL RPC tidak valid: ${url.slice(0, 60)}`); }
-  const lokal = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(u.hostname);
-  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && lokal)) throw new Error(`URL RPC harus https: ${maskUrl(url)}`);
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) throw new Error(`URL RPC harus https: ${maskUrl(url)}`);
   const out = { url };
   if (Number(e.max_batch) > 0) out.max_batch = Math.min(200, Math.round(Number(e.max_batch)));
   if (e.no_logs) out.no_logs = true;
@@ -136,11 +136,11 @@ function cleanEndpoint(e) {
   return out;
 }
 
-// Config akhir = berkas contoh (atau config yang sudah ada, kalau pemasangan diulang)
-// ditimpa jawaban wizard. Fungsi murni supaya bisa diuji tanpa menyalakan server.
+// Final config = the example file (or the existing config, if setup is repeated)
+// overwritten by the wizard answers. A pure function so it can be tested without starting a server.
 function buildConfig({ template, base = null, answers }) {
   const cfg = JSON.parse(JSON.stringify(base || template));
-  normalizeCfg(cfg);                                   // config lama satu-chain -> chains.*
+  normalizeCfg(cfg);                                   // old single-chain config -> chains.*
   const tpl = JSON.parse(JSON.stringify(template));
   normalizeCfg(tpl);
   cfg.chains = cfg.chains || {};
@@ -151,7 +151,7 @@ function buildConfig({ template, base = null, answers }) {
   cfg.server = cfg.server || {};
   cfg.server.port = numOr(answers.server?.port, cfg.server.port || 8799);
   cfg.server.host = String(answers.server?.host || cfg.server.host || '127.0.0.1');
-  // Rahasia yang ikut ditulis ke .env dikosongkan di config: satu kolom, satu sumber.
+  // Secrets also written to .env are emptied in the config: one field, one source.
   if (answers.secrets?.authToken) cfg.server.auth_token = null;
   if (answers.secrets?.publicUrl) cfg.server.public_url = null;
   if (answers.secrets?.telegramToken) { cfg.telegram = cfg.telegram || {}; cfg.telegram.bot_token = null; }
@@ -163,51 +163,51 @@ function buildConfig({ template, base = null, answers }) {
   const aktif = [];
   for (const key of Object.keys(NETWORKS)) {
     const want = answers.chains?.[key] || {};
-    const blok = cfg.chains[key] || tpl.chains?.[key] || (key === 'bsc' ? bscTemplate() : null);
-    if (!blok) continue;
-    cfg.chains[key] = blok;
-    blok.enabled = !!want.enabled;
-    if (!blok.enabled) continue;
+    const block = cfg.chains[key] || tpl.chains?.[key] || (key === 'bsc' ? bscTemplate() : null);
+    if (!block) continue;
+    cfg.chains[key] = block;
+    block.enabled = !!want.enabled;
+    if (!block.enabled) continue;
     aktif.push(key);
-    blok.chain = blok.chain || {};
-    // Daftar endpoint yang tidak dikirim sama sekali = pakai yang sudah ada di config;
-    // daftar KOSONG yang dikirim = kesalahan, bukan izin diam-diam memakai bawaan.
+    block.chain = block.chain || {};
+    // An endpoint list not sent at all = use what is already in the config;
+    // an EMPTY list that is sent = an error, not a silent permission to use the defaults.
     if (Array.isArray(want.endpoints)) {
       if (!want.endpoints.length) throw new Error(`${build(key).label}: belum ada endpoint RPC.`);
-      blok.chain.endpoints = want.endpoints.map(cleanEndpoint);
+      block.chain.endpoints = want.endpoints.map(cleanEndpoint);
     }
-    if (!(blok.chain.endpoints || []).length) throw new Error(`${build(key).label}: belum ada endpoint RPC.`);
-    // Alchemy: satu kunci di .env, satu endpoint di depan daftar untuk tiap chain
-    // yang punya host-nya (networks.js). URL-nya disimpan sebagai ${ALCHEMY_KEY} —
-    // env.js yang menukarnya saat boot, jadi kuncinya tidak pernah masuk config.json.
+    if (!(block.chain.endpoints || []).length) throw new Error(`${build(key).label}: belum ada endpoint RPC.`);
+    // Alchemy: one key in .env, one endpoint at the front of the list for every chain
+    // that has its host (networks.js). The URL is stored as ${ALCHEMY_KEY} —
+    // env.js swaps it at boot, so the key never enters config.json.
     const hostAlchemy = NETWORKS[key]?.alchemyHost;
-    if (answers.secrets?.alchemyKey && hostAlchemy && !(blok.chain.endpoints || []).some((e) => String(e.url).includes(hostAlchemy))) {
-      blok.chain.endpoints = [
+    if (answers.secrets?.alchemyKey && hostAlchemy && !(block.chain.endpoints || []).some((e) => String(e.url).includes(hostAlchemy))) {
+      block.chain.endpoints = [
         { url: 'https://' + hostAlchemy + '/v2/${ALCHEMY_KEY}', max_batch: 40, archive: true, catatan: 'Alchemy — kuncinya di .env sebagai ALCHEMY_KEY' },
-        ...blok.chain.endpoints,
+        ...block.chain.endpoints,
       ];
     }
-    blok.mode = { ...(blok.mode || {}), dry_run: dryRun, paused: false };
+    block.mode = { ...(block.mode || {}), dry_run: dryRun, paused: false };
 
-    // Batas modal dari wizard berlaku sama di tiap chain yang dinyalakan; bedanya
-    // diatur belakangan di halaman Aturan.
-    blok.rules = blok.rules || {};
-    const sz = blok.rules.sizing = { ...(blok.rules.sizing || {}) };
+    // The capital limits from the wizard apply the same on every enabled chain; the difference is
+    // set later on the Rules page.
+    block.rules = block.rules || {};
+    const sz = block.rules.sizing = { ...(block.rules.sizing || {}) };
     if (cap.fixed_quote_usd != null && cap.fixed_quote_usd !== '') { sz.mode = 'fixed_quote'; sz.fixed_quote_usd = numOr(cap.fixed_quote_usd, sz.fixed_quote_usd); }
     for (const k of ['min_quote_usd', 'max_quote_per_position_usd', 'max_total_exposure_usd', 'daily_budget_usd']) {
       if (cap[k] != null && cap[k] !== '') sz[k] = numOr(cap[k], sz[k]);
     }
 
-    // Target: ditambahkan, tidak menimpa — daftar di config cuma bibit untuk tabel
-    // targets di SQLite (INSERT OR IGNORE saat boot).
-    const punya = new Set((blok.targets || []).map((t) => String(t.address || '').toLowerCase()));
+    // Targets: added, not overwritten — the list in the config is only a seed for the targets
+    // table in SQLite (INSERT OR IGNORE at boot).
+    const owns = new Set((block.targets || []).map((t) => String(t.address || '').toLowerCase()));
     for (const t of answers.targets || []) {
       if ((t.chain || PRIMARY) !== key) continue;
       const addr = String(t.address || '').toLowerCase();
       if (!/^0x[0-9a-f]{40}$/.test(addr)) throw new Error(`Alamat target tidak valid: ${String(t.address).slice(0, 20)}`);
-      if (punya.has(addr)) continue;
-      punya.add(addr);
-      blok.targets = [...(blok.targets || []), { address: addr, label: String(t.label || '').slice(0, 60) || null, enabled: true }];
+      if (owns.has(addr)) continue;
+      owns.add(addr);
+      block.targets = [...(block.targets || []), { address: addr, label: String(t.label || '').slice(0, 60) || null, enabled: true }];
     }
   }
   if (!aktif.length) throw new Error('Pilih minimal satu chain.');
@@ -215,13 +215,13 @@ function buildConfig({ template, base = null, answers }) {
   return cfg;
 }
 
-// Tulis semua berkas. Urutannya disengaja: rahasia dulu, config.json paling akhir —
-// ia yang menjadi tanda "sudah terpasang", jadi kalau proses mati di tengah jalan
-// wizard-nya muncul lagi, bukan bot setengah jadi yang menyala.
+// Write all files. The order is deliberate: secrets first, config.json last —
+// it is the "already installed" marker, so if the process dies midway
+// the wizard shows up again, not a half-finished bot that comes up.
 function applySetup({ root, cfgPath, envPath, answers, log = () => {} }) {
   const template = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json'), 'utf8'));
   const base = fs.existsSync(cfgPath) ? JSON.parse(fs.readFileSync(cfgPath, 'utf8')) : null;
-  const cfg = buildConfig({ template, base, answers });          // validasi sebelum apa pun ditulis
+  const cfg = buildConfig({ template, base, answers });          // validate before anything is written
 
   const s = answers.secrets || {};
   const vals = {
@@ -233,9 +233,9 @@ function applySetup({ root, cfgPath, envPath, answers, log = () => {} }) {
     ALCHEMY_KEY: s.alchemyKey,
   };
   writeEnvFile({ envPath, examplePath: path.join(root, '.env.example'), vals });
-  // Proses ini lanjut menyalakan bot tanpa restart, jadi nilai barunya dipasang
-  // sekarang juga: loadDotEnv tidak menimpa variabel yang sudah ada di process.env,
-  // dan pada pemasangan yang diulang variabel lamanya sudah telanjur termuat.
+  // This process goes on to start the bot without a restart, so the new values are installed
+  // right now: loadDotEnv does not overwrite variables that already exist in process.env,
+  // and on a repeated setup the old variables have already been loaded.
   for (const [k, v] of Object.entries(vals)) if (v) process.env[k] = String(v);
   log(`pemasangan: .env ditulis (${envPath})`);
 
@@ -256,27 +256,27 @@ function applySetup({ root, cfgPath, envPath, answers, log = () => {} }) {
   return { cfg, wallet };
 }
 
-// ---- pulihkan dari cadangan ----------------------------------------------
-// Jalan kedua dari wizard: berkas cadangan dari Pengaturan → Cadangan (backup.js)
-// menggantikan semua langkah. Belum ada basis data yang terbuka dan belum ada mesin
-// yang jalan, jadi berkasnya ditulis langsung — tanpa berkas tertunda dan restart.
+// ---- restore from a backup ----------------------------------------------
+// The wizard's second path: a backup file from Settings → Backup (backup.js)
+// replaces all the steps. No database is open yet and no engine is
+// running, so the files are written directly — without a pending file and restart.
 
-// ${NAMA} yang dirujuk URL/header RPC di config. Yang belum ada di lingkungan mesin
-// ini ditanyakan wizard; kalau dibiarkan kosong endpoint-nya gagal dan terlihat di
-// Pengaturan → RPC (applyEnv membiarkannya apa adanya).
+// ${NAME} referenced by RPC URLs/headers in the config. Those not yet in this machine's
+// environment are asked by the wizard; if left empty the endpoint fails and is visible in
+// Settings → RPC (applyEnv leaves it as it is).
 function envRefs(cfg) {
   const out = new Set();
-  const cari = (v) => { for (const m of String(v || '').matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) out.add(m[1]); };
+  const find = (v) => { for (const m of String(v || '').matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) out.add(m[1]); };
   for (const e of allEndpoints(cfg)) {
-    cari(e.url);
-    for (const h of Object.values(e.headers || {})) cari(h);
+    find(e.url);
+    for (const h of Object.values(e.headers || {})) find(h);
   }
   return [...out];
 }
 
-// Jalur absolut dari mesin lain (/home/ubuntu/... di Mac) tidak bisa dipakai di sini:
-// jatuh ke bawaan template. Jalur relatif, ~/…, atau di bawah home/folder ini dipakai.
-function jalurLokal(p, dflt, root) {
+// An absolute path from another machine (/home/ubuntu/... on a Mac) cannot be used here:
+// it falls back to the template default. A relative path, ~/…, or under the home/this folder is used.
+function localPath(p, dflt, root) {
   if (!p) return dflt;
   const abs = String(p).replace(/^~(?=$|\/)/, os.homedir());
   if (!path.isAbsolute(abs)) return p;
@@ -284,23 +284,23 @@ function jalurLokal(p, dflt, root) {
   return di(os.homedir()) || di(path.resolve(root)) ? p : dflt;
 }
 
-// Config hasil pulihan: isi cadangan, dengan yang milik MESIN INI dari wizard (port,
-// token lewat .env) atau template (jalur yang tidak ada di sini). Selalu simulasi.
+// The restored config: the backup's contents, with what belongs to THIS MACHINE from the wizard (port,
+// token via .env) or the template (paths that do not exist here). Always simulation.
 function restoredConfig({ backup, template, port, root }) {
   const cfg = JSON.parse(JSON.stringify(backup.parts.config.json));
   normalizeCfg(cfg);
   cfg.server = { ...(cfg.server || {}), port, host: cfg.server?.host || template.server?.host || '127.0.0.1' };
-  // Token dasbor ditulis ke .env; token lama di berkas (dari mesin asal) tidak dibawa.
+  // The dashboard token is written to .env; the old token in the file (from the origin machine) is not carried over.
   cfg.server.auth_token = null;
-  cfg.db = { ...(cfg.db || {}), path: jalurLokal(cfg.db?.path, template.db?.path || 'data/lpcopy.db', root) };
-  cfg.wallet = { ...(cfg.wallet || {}), key_file: jalurLokal(cfg.wallet?.key_file, template.wallet?.key_file || '~/.lpcopy/key', root) };
+  cfg.db = { ...(cfg.db || {}), path: localPath(cfg.db?.path, template.db?.path || 'data/lpcopy.db', root) };
+  cfg.wallet = { ...(cfg.wallet || {}), key_file: localPath(cfg.wallet?.key_file, template.wallet?.key_file || '~/.lpcopy/key', root) };
   cfg.mode = { ...(cfg.mode || {}), dry_run: true };
   cfg.setup = { completed_ts: Date.now(), version: SETUP_VERSION, restored_from: backup.createdAt || null };
   return cfg;
 }
 
-// Urutan sama dengan applySetup: semua yang bisa gagal karena masukan (berkas, password,
-// basis data rusak) diperiksa lebih dulu, config.json ditulis PALING AKHIR.
+// The same order as applySetup: everything that can fail because of input (file, password,
+// corrupt database) is checked first, config.json is written LAST.
 async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, password = '', token, port, env = {}, log = () => {} }) {
   const backup = parseBackup(raw);
   if (!backup.parts.config) throw new Error('Berkas cadangan ini tidak berisi pengaturan — pasang baru, lalu pulihkan sisanya dari Pengaturan → Cadangan.');
@@ -318,14 +318,14 @@ async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, p
     try { w = await ethers.Wallet.fromEncryptedJson(JSON.stringify(backup.parts.wallet.keystore), String(password)); }
     catch { throw new Error('Password keystore salah, atau keystore di berkas cadangan rusak.'); }
   }
-  // Basis data: diperiksa (hash, integritas, tabel) di berkas tertunda dulu, baru dipasang.
+  // Database: checked (hash, integrity, tables) in a pending file first, then installed.
   const dbPath = path.isAbsolute(cfg.db.path) ? cfg.db.path : path.join(root, cfg.db.path);
   if (want.db) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     await stageRestore({ backup, parts: { db: true }, cfgPath, dbPath });
   }
 
-  // Hanya variabel yang memang dirujuk config yang boleh ditulis ke .env lewat sini.
+  // Only variables the config really references may be written to .env through here.
   const refs = new Set(envRefs(cfg));
   const vals = { LPCOPY_AUTH_TOKEN: String(token) };
   for (const [k, v] of Object.entries(env || {})) if (refs.has(k) && String(v || '').trim()) vals[k] = String(v).trim();
@@ -338,11 +338,11 @@ async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, p
   let wallet = null;
   if (w) {
     const kp = keyPathOf(cfg);
-    let sama = false;
-    try { sama = new ethers.Wallet(fs.readFileSync(kp, 'utf8').trim()).address === w.address; } catch { /* belum ada / bukan kunci */ }
-    const bak = sama ? null : writeKeyFile(kp, w.privateKey);
+    let same = false;
+    try { same = new ethers.Wallet(fs.readFileSync(kp, 'utf8').trim()).address === w.address; } catch { /* belum ada / bukan kunci */ }
+    const bak = same ? null : writeKeyFile(kp, w.privateKey);
     wallet = { address: w.address.toLowerCase(), keyFile: kp, backup: bak };
-    log(`pemulihan: wallet ${wallet.address}${sama ? ' (berkas kunci sudah sama)' : ' ditulis'}${bak ? ` — kunci lama dicadangkan: ${path.basename(bak)}` : ''}`);
+    log(`pemulihan: wallet ${wallet.address}${same ? ' (berkas kunci sudah sama)' : ' ditulis'}${bak ? ` — kunci lama dicadangkan: ${path.basename(bak)}` : ''}`);
   }
 
   fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
@@ -352,11 +352,11 @@ async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, p
   return { cfg, wallet, db: want.db };
 }
 
-// ---- server wizard --------------------------------------------------------
-// Server ini hidup hanya sampai pemasangan selesai, dan hanya melayani halaman
-// wizard + /api/setup/*. Tidak ada rute dasbor di sini: selama belum ada config,
-// belum ada database, mesin, atau token — tidak ada yang bisa dibocorkan selain
-// yang memang ditanyakan wizard.
+// ---- wizard server --------------------------------------------------------
+// This server lives only until setup completes, and only serves the wizard page
+// + /api/setup/*. There are no dashboard routes here: as long as there is no config,
+// no database, engine, or token — there is nothing to leak apart from
+// what the wizard asks.
 const SEC_HEADERS = {
   'x-frame-options': 'DENY',
   'content-security-policy': "frame-ancestors 'none'",
@@ -373,16 +373,16 @@ function readJson(req, max = 256 * 1024) {
   });
 }
 
-// Alamat yang enak dibuka orangnya: 0.0.0.0 / :: tidak bisa diklik.
-const bukaUrl = (host, port) => `http://${/^(0\.0\.0\.0|::|)$/.test(host) ? '127.0.0.1' : host}:${port}`;
+// An address that is pleasant to open: 0.0.0.0 / :: cannot be clicked.
+const openUrl = (host, port) => `http://${/^(0\.0\.0\.0|::|)$/.test(host) ? '127.0.0.1' : host}:${port}`;
 
-// Menyalakan wizard dan menunggu sampai berkas ditulis. Promise-nya selesai setelah
-// server ditutup rapat — port yang sama langsung dipakai server dasbor sesudahnya.
-function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }) {
-  const halangan = pemasanganTerhalang({ root, cfgPath, diminta });
+// Start the wizard and wait until the files are written. Its Promise resolves after the
+// server is fully closed — the same port is used straight away by the dashboard server afterwards.
+function runSetup({ root, cfgPath, envPath, requested = false, log = console.log }) {
+  const halangan = setupBlocked({ root, cfgPath, requested });
   if (halangan) { log(halangan); return process.exit(1); }
-  // Template wajib ada: wizard menyusun config DARI berkas contoh, bukan dari daftar
-  // bawaan kedua di dalam kode yang pasti akan menyimpang darinya.
+  // The template is required: the wizard builds the config FROM the example file, not from a second
+  // built-in list in the code that would certainly drift from it.
   const tplPath = path.join(root, 'config.example.json');
   if (!fs.existsSync(tplPath)) {
     log(`config.example.json tidak ada di ${root} — wizard pemasangan memakainya sebagai template.`);
@@ -395,11 +395,11 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
   const port = Number(process.env.LPCOPY_SETUP_PORT || sourceCfg.server?.port || 8799);
   const host = String(process.env.LPCOPY_SETUP_HOST || sourceCfg.server?.host || '127.0.0.1');
 
-  // Kode pemasangan. Halaman ini memasang kunci penandatangan dan token dasbor, dan
-  // sering dibuka lewat tunnel (cloudflared) walau server-nya sendiri terikat di
-  // loopback — jadi kodenya SELALU diminta, bukan cuma saat terikat ke publik.
-  // Tercetak di terminal dan disimpan di data/setup-code.txt supaya bisa di-`cat`
-  // dari sesi SSH lain.
+  // Setup code. This page installs the signing key and the dashboard token, and is
+  // often opened through a tunnel (cloudflared) even though the server itself is bound to
+  // loopback — so the code is ALWAYS required, not just when bound publicly.
+  // Printed in the terminal and stored in data/setup-code.txt so it can be `cat`-ed
+  // from another SSH session.
   const code = crypto.randomBytes(4).toString('hex');
   const codeFile = path.join(root, 'data', 'setup-code.txt');
   try {
@@ -417,24 +417,24 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   };
 
-  // Kunci privat tidak pernah kembali ke peramban: ia dibuat/divalidasi di sini,
-  // ditahan di memori, dan baru ditulis ke berkas kunci saat wizard diselesaikan.
+  // The private key never returns to the browser: it is generated/validated here,
+  // held in memory, and only written to the key file when the wizard is finished.
   let pending = null;
 
   const chainKeys = Object.keys(NETWORKS);
   const srcEndpoints = (key) => {
-    const blok = sourceCfg.chains?.[key] || (key === 'bsc' ? bscTemplate() : null) || {};
-    return (blok.chain?.endpoints || []).map((e) => ({ ...e }));
+    const block = sourceCfg.chains?.[key] || (key === 'bsc' ? bscTemplate() : null) || {};
+    return (block.chain?.endpoints || []).map((e) => ({ ...e }));
   };
-  // Endpoint yang URL-nya memuat rahasia (config lama, pemasangan diulang) dikirim
-  // tersamar; peramban merujuknya kembali dengan {ref:i} dan aslinya tidak pernah
-  // meninggalkan server.
+  // Endpoints whose URL contains a secret (an old config, a repeated setup) are sent
+  // masked; the browser refers back to them with {ref:i} and the original never
+  // leaves the server.
   const epView = (e, i) => {
-    const rahasia = hasSecret(e);
+    const hidden = hasSecret(e);
     let hostname = '?';
     try { hostname = new URL(e.url).hostname; } catch { /* biarkan */ }
     return {
-      ref: i, url: rahasia ? maskUrl(e.url) : e.url, host: hostname, secret: rahasia,
+      ref: i, url: hidden ? maskUrl(e.url) : e.url, host: hostname, secret: hidden,
       max_batch: e.max_batch || 40, no_logs: !!e.no_logs, max_log_blocks: e.max_log_blocks || 0,
       archive: !!e.archive, catatan: e.catatan || '',
     };
@@ -443,9 +443,9 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
     const src = srcEndpoints(key);
     return (list || []).map((e) => {
       if (e && e.ref != null && e.url == null) {
-        const asli = src[Number(e.ref)];
-        if (!asli) throw new Error('endpoint tidak dikenal');
-        return { ...asli, ...(e.no_logs != null ? { no_logs: !!e.no_logs } : {}), ...(e.archive != null ? { archive: !!e.archive } : {}), ...(e.max_log_blocks != null ? { max_log_blocks: Number(e.max_log_blocks) } : {}) };
+        const original = src[Number(e.ref)];
+        if (!original) throw new Error('endpoint tidak dikenal');
+        return { ...original, ...(e.no_logs != null ? { no_logs: !!e.no_logs } : {}), ...(e.archive != null ? { archive: !!e.archive } : {}), ...(e.max_log_blocks != null ? { max_log_blocks: Number(e.max_log_blocks) } : {}) };
       }
       return e;
     }).filter(Boolean);
@@ -458,9 +458,9 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
       config: fs.existsSync(cfgPath), env: fs.existsSync(envPath),
       key: fs.existsSync(keyPathOf(sourceCfg)), privateKeyFromEnv: !!process.env.LPCOPY_PRIVATE_KEY,
     },
-    server: { port, host, url: bukaUrl(host, port) },
+    server: { port, host, url: openUrl(host, port) },
     suggestToken: crypto.randomBytes(18).toString('base64url'),
-    currencies: Object.entries(CURRENCIES).map(([kode, nama]) => ({ code: kode, name: nama, nameEn: CURRENCIES_EN[kode] || nama })),
+    currencies: Object.entries(CURRENCIES).map(([passcode, nameVal]) => ({ code: passcode, name: nameVal, nameEn: CURRENCIES_EN[passcode] || nameVal })),
     display: { currency: sourceCfg.display?.currency ?? 'IDR' },
     wallet: pending ? { address: pending.address, mode: pending.mode } : null,
     chains: chainKeys.map((key) => {
@@ -479,31 +479,31 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
   });
 
   return new Promise((resolve, reject) => {
-    let selesai = null;
+    let finished = null;
     const json = (res, sc, body) => { res.writeHead(sc, { 'content-type': 'application/json; charset=utf-8', ...SEC_HEADERS }); res.end(JSON.stringify(body)); };
-    // Berkas sudah ditulis (pasang baru atau pulihan): jawab, lalu serahkan port ke dasbor.
-    const selesaikan = (res, hasil) => {
-      selesai = hasil;
-      // Port dasbor diambil dari config yang BARU ditulis: kalau pemasangan
-      // dijalankan di port lain (LPCOPY_SETUP_PORT), peramban harus diberi tahu
-      // ke mana pindahnya — kalau tidak, ia menunggu di port yang sudah mati.
-      const portAkhir = Number(hasil.cfg.server?.port || port);
+    // The files are written (fresh install or restore): answer, then hand the port over to the dashboard.
+    const resolveVal = (res, result) => {
+      finished = result;
+      // The dashboard port is taken from the FRESHLY written config: if setup
+      // ran on another port (LPCOPY_SETUP_PORT), the browser must be told
+      // where it moved — otherwise it waits on a dead port.
+      const finalPort = Number(result.cfg.server?.port || port);
       json(res, 200, {
         ok: true,
-        address: hasil.wallet?.address || null,
-        restored: !!hasil.cfg.setup?.restored_from,
-        port: portAkhir,
-        samePort: portAkhir === port,
-        url: bukaUrl(hasil.cfg.server?.host || host, portAkhir),
+        address: result.wallet?.address || null,
+        restored: !!result.cfg.setup?.restored_from,
+        port: finalPort,
+        samePort: finalPort === port,
+        url: openUrl(result.cfg.server?.host || host, finalPort),
       });
-      // Jawaban dulu, baru tutup — port-nya harus bebas sebelum server dasbor
-      // mengikatnya, termasuk koneksi keep-alive yang masih menggantung.
+      // Answer first, then close — the port must be free before the dashboard server
+      // binds it, including keep-alive connections that are still hanging.
       setTimeout(() => {
         server.closeAllConnections?.();
         server.close(() => {
           try { fs.unlinkSync(codeFile); } catch { /* sudah hilang */ }
           log('pemasangan selesai — menyalakan Quiver…');
-          resolve(selesai);
+          resolve(finished);
         });
       }, 100);
     };
@@ -512,8 +512,8 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
       const url = new URL(req.url, 'http://x');
       const key = `${req.method} ${url.pathname}`;
       try {
-        // Ditanya terus oleh peramban setelah "Simpan": begitu jawabannya bukan lagi
-        // {setup:true} (server ini sudah mati, dasbor yang menjawab), halaman pindah.
+        // Polled continuously by the browser after "Save": once the answer is no longer
+        // {setup:true} (this server is dead, the dashboard answers), the page moves on.
         if (key === 'GET /api/setup/ping') return json(res, 200, { setup: true });
 
         if (url.pathname.startsWith('/api/setup/')) {
@@ -525,8 +525,8 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
 
         if (key === 'GET /api/setup/state') return json(res, 200, state());
 
-        // Wallet: dibuat/diperiksa sekarang, ditulis nanti. Yang balik ke peramban
-        // cuma alamatnya.
+        // Wallet: generated/checked now, written later. What goes back to the browser
+        // is only its address.
         if (key === 'POST /api/setup/wallet') {
           const b = await readJson(req);
           if (b.mode === 'none') { pending = null; return json(res, 200, { ok: true, wallet: null }); }
@@ -544,8 +544,8 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
           return json(res, 200, { ok: true, wallet: { address: pending.address, mode: 'import' } });
         }
 
-        // Uji satu endpoint — pengujian yang sama dengan halaman Pengaturan, termasuk
-        // saran bendera (no_logs / max_log_blocks / archive).
+        // Test one endpoint — the same test as the Settings page, including the
+        // flag suggestions (no_logs / max_log_blocks / archive).
         if (key === 'POST /api/setup/rpc') {
           const b = await readJson(req);
           const ck = String(b.chain || PRIMARY);
@@ -553,12 +553,12 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
           let ep;
           try { ep = resolveEps(ck, [b.endpoint])[0]; } catch (e) { return json(res, 200, { error: e.message }); }
           if (!ep?.url) return json(res, 200, { error: 'URL RPC kosong' });
-          const hasil = await probeRpc({ url: ep.url, headers: ep.headers }, build(ck));
-          return json(res, 200, { ok: true, ...hasil });
+          const result = await probeRpc({ url: ep.url, headers: ep.headers }, build(ck));
+          return json(res, 200, { ok: true, ...result });
         }
 
-        // Pratinjau berkas cadangan: yang perlu ditanyakan sebelum memulihkan. Cuma
-        // bagian config yang dikirim peramban (basis data bisa puluhan MB).
+        // Preview of the backup file: what needs to be asked before restoring. Only
+        // the config part is sent by the browser (the database can be tens of MB).
         if (key === 'POST /api/setup/restore/inspect') {
           const b = await readJson(req);
           const c = b.config && typeof b.config === 'object' ? JSON.parse(JSON.stringify(b.config)) : null;
@@ -570,12 +570,12 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
 
         if (key === 'POST /api/setup/restore') {
           const b = await readJson(req, 256 * 1024 * 1024);
-          let hasil;
+          let result;
           try {
-            hasil = await applyRestore({ root, cfgPath, envPath, backup: b.backup, parts: b.parts, password: b.password,
+            result = await applyRestore({ root, cfgPath, envPath, backup: b.backup, parts: b.parts, password: b.password,
               token: b.token, port: b.port, env: b.env, log });
           } catch (e) { return json(res, 200, { error: e.message }); }
-          return selesaikan(res, hasil);
+          return resolveVal(res, result);
         }
 
         if (key === 'POST /api/setup/finish') {
@@ -591,14 +591,14 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
           if (b.capital?.dry_run === false && !pending && !fs.existsSync(keyPathOf(sourceCfg)) && !process.env.LPCOPY_PRIVATE_KEY) {
             return json(res, 200, { error: 'Mode LIVE butuh wallet — pasang wallet dulu di langkah Wallet.' });
           }
-          let hasil;
-          try { hasil = applySetup({ root, cfgPath, envPath, answers, log }); }
+          let result;
+          try { result = applySetup({ root, cfgPath, envPath, answers, log }); }
           catch (e) { return json(res, 200, { error: e.message }); }
-          return selesaikan(res, hasil);
+          return resolveVal(res, result);
         }
 
         if (url.pathname.startsWith('/api/')) return json(res, 404, { error: 'rute tidak ada' });
-        // Sisanya: halaman wizard, jalur mana pun (tautan lama, /dashboard, dll).
+        // The rest: the wizard page, any path (old links, /dashboard, etc.).
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...SEC_HEADERS });
         return res.end(SETUP_PAGE());
       } catch (e) {
@@ -607,8 +607,8 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
     });
 
     server.on('error', (e) => {
-      // Sama seperti server dasbor di index.js: port yang sudah dipakai dijawab dengan
-      // petunjuk, bukan tumpahan stack.
+      // The same as the dashboard server in index.js: a port already in use is answered with
+      // a hint, not a stack dump.
       if (e.code === 'EADDRINUSE') {
         log(`port ${port} sudah dipakai — kemungkinan Quiver lain masih jalan.`);
         log(`  cek: lsof -ti tcp:${port}   |   hentikan: lsof -ti tcp:${port} | xargs kill`);
@@ -617,20 +617,20 @@ function runSetup({ root, cfgPath, envPath, diminta = false, log = console.log }
       }
       reject(e);
     });
-    // Spanduk ini dwibahasa walau sisa log Indonesia: ia pintu masuk pemasangan, dan
-    // halaman wizard-nya sendiri bawaannya Inggris (src/setup-page.js).
+    // This banner is bilingual although the rest of the log is Indonesian: it is the entry to setup, and
+    // the wizard page itself defaults to English (src/setup-page.js).
     server.listen(port, host, () => {
       const garis = '─'.repeat(52);
       log(`\n┌${garis}┐`);
       log(`│  Quiver — first-run setup · pemasangan awal`);
-      log(`│  Open / buka  : ${bukaUrl(host, port)}`);
+      log(`│  Open / buka  : ${openUrl(host, port)}`);
       log(`│  Setup code   : ${code}`);
       log(`│  (also in / tersimpan juga di ${path.relative(root, codeFile)})`);
       log(`└${garis}┘\n`);
-      // pm2 melaporkan proses ini "online" walau botnya belum jalan — katakan terang-terangan.
+      // pm2 reports this process "online" although the bot is not running — say so plainly.
       if (process.env.pm_id !== undefined) log('PERHATIAN: bot BELUM berjalan — instance ini sedang menunggu pemasangan diselesaikan.');
     });
   });
 }
 
-module.exports = { setupNeeded, pemasanganTerhalang, upsertEnv, writeEnvFile, buildConfig, applySetup, applyRestore, restoredConfig, envRefs, cleanEndpoint, keyPathOf, writeKeyFile, runSetup, SETUP_VERSION };
+module.exports = { setupNeeded, setupBlocked, upsertEnv, writeEnvFile, buildConfig, applySetup, applyRestore, restoredConfig, envRefs, cleanEndpoint, keyPathOf, writeKeyFile, runSetup, SETUP_VERSION };

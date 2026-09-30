@@ -1,20 +1,20 @@
 'use strict';
-// Riwayat swap untuk halaman Swap: bukan cuma swap manual, tapi semua tx yang
-// menukar aset — zap saat membuka LP, jual sisa saat menutup, jual balik token zap
-// yang tidak jadi LP (mint gagal), jual fee hasil klaim, jembatan ETH/USDG, isi gas,
-// bungkus/buka WETH — ditambah klaim fee dan compound. Tiap baris diberi `method`
-// (dari mana swap itu datang) dan `route` (Kyber atau pool langsung).
+// Swap history for the Swap page: not just manual swaps, but every tx that
+// exchanges assets — the zap when opening an LP, leftover sale when closing, selling back the zap token
+// of an LP that did not happen (failed mint), selling claimed fees, ETH/USDG bridge, gas top-up,
+// wrap/unwrap WETH — plus fee claims and compounds. Every row gets a `method`
+// (where the swap came from) and a `route` (Kyber or a direct pool).
 //
-// Baris lama belum mencatat token & jumlahnya; sebisanya ditebak dari detail yang ada
-// (pay/buy zap, positionSales, arah jembatan) dan posisi terkait. Yang tidak bisa
-// ditebak dibiarkan kosong — halaman menampilkan nilai USD-nya saja.
+// Old rows did not record token & amount; they are guessed as well as possible from the detail available
+// (pay/buy zap, positionSales, bridge direction) and the related position. Whatever cannot be
+// guessed is left empty — the page shows only its USD value.
 
 const KINDS = ['swap_manual', 'zap_swap', 'sell_leftover', 'bridge_swap', 'gas_topup', 'wrap_eth', 'unwrap_weth', 'claim_fees', 'compound'];
 const lc = (t) => (t == null ? null : String(t).toLowerCase());
 const big = (v) => { try { return v == null || v === '' ? null : BigInt(v); } catch { return null; } };
 
-// Asal penjualan antrean sisa. Baris sebelum `source` dicatat: posisi terisi = hasil
-// menutup posisi; posisi kosong = zap tanpa LP atau sapuan wallet (tidak terbedakan).
+// Origin of a leftover-queue sale. Rows before `source` was recorded: a filled position = proceeds
+// of closing the position; an empty position = a zap without an LP or a wallet sweep (indistinguishable).
 function leftoverMethod(d) {
   if (d.source === 'fee') return 'fee_sell';
   if (d.source === 'zap') return 'unwind';
@@ -58,7 +58,7 @@ function swapHistory({ store, chain, ethUsd = 0, limit = 40, kinds = KINDS }) {
     if (!posCache.has(id)) posCache.set(id, store.get('SELECT id, token0, token1 FROM positions WHERE id=?', id) || null);
     return posCache.get(id);
   };
-  // [token bukan-kuotasi, token kuotasi] sebuah posisi.
+  // [non-quote token, quote token] of a position.
   const sides = (p) => {
     if (!p) return [null, null];
     const t0 = lc(p.token0), t1 = lc(p.token1);
@@ -104,7 +104,7 @@ function swapHistory({ store, chain, ethUsd = 0, limit = 40, kinds = KINDS }) {
       tokenIn = ADDR.weth; tokenOut = ADDR.native; outRaw = inRaw;
     }
 
-    // Klaim fee: jumlah per sisi dari fee_claims (dibaca dari receipt saat dibukukan).
+    // Fee claim: amount per side from fee_claims (read from the receipt when booked).
     let claim = null;
     if (r.kind === 'claim_fees' && p) {
       const c = store.get('SELECT amount0, amount1, value_quote FROM fee_claims WHERE tx_hash=?', r.hash);
@@ -119,8 +119,8 @@ function swapHistory({ store, chain, ethUsd = 0, limit = 40, kinds = KINDS }) {
     }
 
     const swap = !['claim_fees', 'compound'].includes(r.kind);
-    // Rute: Kyber (agregator) atau pool langsung. `via` berisi poolRef untuk pool
-    // langsung dan 'kyber' untuk Kyber; swap manual/isi gas selalu Kyber.
+    // Route: Kyber (aggregator) or a direct pool. `via` holds the poolRef for a direct
+    // pool and 'kyber' for Kyber; manual swaps/gas top-ups are always Kyber.
     const direct = (d.via && d.via !== 'kyber') || (r.kind === 'bridge_swap' && d.pool && !d.dex) || /^pool /.test(d.dex || '');
     const route = !swap || r.kind === 'wrap_eth' || r.kind === 'unwrap_weth' ? null : direct ? 'pool' : 'kyber';
 

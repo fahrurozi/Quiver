@@ -1,6 +1,6 @@
-// Detail riset satu wallet: PnL, kalender profit, posisi berjalan, dan riwayat posisi.
-// Dipakai halaman Wallet (cari alamat apa pun) dan halaman detail Target — satu
-// implementasi supaya keduanya tidak pernah menampilkan angka yang berbeda.
+// Research detail of one wallet: PnL, profit calendar, running positions, and position history.
+// Used by the Wallet page (look up any address) and the Target detail page — a single
+// implementation so the two never show different figures.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Card, ProgressBar, Spinner, toast } from '@heroui/react';
 import { RefreshCw, Plus, Check } from 'lucide-react';
@@ -26,7 +26,7 @@ function phaseText(j) {
   if (j.phase === 'posisi') return tt('Tahap 2 dari 2 — menghitung posisi {done} / {total}', { done: j.done || 0, total: j.total || '?' });
   return tt('Menyiapkan pemindaian…');
 }
-// progres gabungan: tahap 1 = 0–30%, tahap 2 = 30–100%
+// combined progress: stage 1 = 0–30%, stage 2 = 30–100%
 const overall = (j) => (!j ? 2 : j.phase === 'transfer' ? Math.round((j.progress || 0) * 0.3)
   : j.phase === 'posisi' ? 30 + Math.round((j.progress || 0) * 0.7) : 2);
 
@@ -63,17 +63,17 @@ function ScanProgress({ job, compact }) {
   );
 }
 
-// Profil gaya: BAGAIMANA wallet ini ber-LP, bukan berapa hasilnya — ukuran posisi,
-// lebar rentang, dan seberapa sering harga masih di dalam rentang. Inilah yang dulu
-// jadi isi halaman Scout terpisah; angkanya sama, hanya dihitung dari posisi berjalan
-// yang sudah ada di sini, jadi tidak perlu pemindaian kedua.
+// Style profile: HOW this wallet LPs, not what it earned — position size,
+// range width, and how often the price is still inside the range. This is what used to
+// be the content of the separate Scout page; the figures are the same, just computed from the running
+// positions already here, so no second scan is needed.
 const median = (a) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0);
 
 function styleOf(open) {
   if (!open?.length) return null;
-  // curTick bisa kosong kalau harga pool gagal dibaca; kolom in_range dari pindai
-  // terakhir jadi cadangan, dan posisi yang tak punya keduanya tidak ikut dihitung
-  // supaya persentasenya tidak melar ke bawah.
+  // curTick can be empty if the pool price failed to read; the in_range column from the last scan
+  // is the fallback, and a position with neither is not counted
+  // so the percentage does not stretch downward.
   const known = open.filter((p) => p.curTick != null || p.in_range != null);
   const inRange = known.filter((p) => (p.curTick != null
     ? p.curTick >= p.tick_lower && p.curTick < p.tick_upper : !!p.in_range));
@@ -87,8 +87,8 @@ function styleOf(open) {
     feeRatioPct: value > 0 ? (sum(open, (p) => p.live_fee_q) / value) * 100 : null,
   };
 }
-// Rentang penuh menghasilkan angka astronomis (1,0001^1,77 juta tick); menyebutnya
-// "penuh" lebih berguna daripada mencetak 1e77%.
+// A full range produces an astronomical figure (1.0001^1.77 million ticks); calling it
+// "full" is more useful than printing 1e77%.
 const widthText = (w) => (w >= 10000 ? tt('penuh') : w >= 100 ? `${Math.round(w)}%` : `${w.toFixed(1)}%`);
 
 function Details({ s, open }) {
@@ -126,7 +126,7 @@ function Details({ s, open }) {
   );
 }
 
-// Fee total = yang sudah ditarik + yang masih menempel di posisi.
+// Total fees = what was already withdrawn + what is still attached to the position.
 const feeTotal = (p) => (p.status === 'open' ? (p.fees_q || 0) + (p.live_fee_q || 0) : (p.fees_q || 0));
 
 const posCols = (open) => [
@@ -179,14 +179,14 @@ const posCols = (open) => [
 
 
 /**
- * address     : wallet yang ditampilkan
- * autoScan    : kalau belum pernah dipindai, langsung pindai (default ya)
- * showTargetButton : tampilkan tombol "Jadikan target"
- * onChanged   : dipanggil setelah pindai selesai / jadi target (mis. untuk menyegarkan daftar)
+ * address     : the wallet being shown
+ * autoScan    : if never scanned, scan right away (default yes)
+ * showTargetButton : show the "Make target" button
+ * onChanged   : called after the scan finishes / it becomes a target (e.g. to refresh the list)
  */
 const sum = (rows, f) => rows.reduce((a, r) => a + (f(r) || 0), 0);
 
-// Ringkasan di kepala panel — angka yang paling sering dicari sebelum melihat baris.
+// Summary at the panel head — the figures most often sought before looking at the rows.
 function Totals({ rows }) {
   const { t } = useI18n();
   if (!rows.length) return null;
@@ -208,7 +208,7 @@ function Totals({ rows }) {
   );
 }
 
-// Baris total di kaki tabel.
+// Total row at the foot of the table.
 function TotalRow({ rows, open }) {
   const { t } = useI18n();
   if (!rows.length) return null;
@@ -230,8 +230,8 @@ function TotalRow({ rows, open }) {
   );
 }
 
-// Pilihan jendela yang paling mendekati rentang blok yang sudah benar-benar
-// terpindai — supaya dropdown tidak berkata "~7 hari" saat datanya cuma 1 hari.
+// The window choice closest to the block range that was actually
+// scanned — so the dropdown does not say "~7 days" when the data is only 1 day.
 const windowFor = (span) => {
   const ids = WINDOWS.map(([id]) => Number(id));
   const hit = ids.find((n) => n >= span * 0.9) ?? ids[ids.length - 1];
@@ -244,11 +244,11 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
   const touched = useRef(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Pengambilan ulang di latar (poll pelan, setelah pindai) — data lama tetap tampil.
+  // Background refetch (slow poll, after a scan) — old data stays shown.
   const [busy, setBusy] = useState(false);
-  // Posisi yang lacinya sedang dibuka (null = tertutup). Disimpan sebagai token_id,
-  // bukan barisnya: poll latar mengganti seluruh objek baris tiap 2–30 detik, dan
-  // laci yang memegang salinan lama akan membeku pada angka yang sudah basi.
+  // The position whose drawer is open (null = closed). Stored as a token_id,
+  // not as its row: the background poll replaces the whole row object every 2–30 seconds, and
+  // a drawer holding an old copy would freeze on stale figures.
   const [histId, setHistId] = useState(null);
   const timer = useRef(null);
   const alive = useRef(true);
@@ -256,15 +256,15 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
   const stopPoll = () => { clearInterval(timer.current); timer.current = null; };
 
   const fetchWallet = useCallback(async () => {
-    // Balasannya membaca chain (harga & fee posisi yang masih berjalan), jadi bisa
-    // makan waktu — poll pelan 30 detik yang berjalan diam-diam pun perlu terlihat.
+    // The reply reads the chain (price & fees of still-running positions), so it may
+    // take a while — even a slow 30-second poll that runs quietly needs to be visible.
     setBusy(true);
     let d;
     try { d = await get('/api/wallet?address=' + address); }
     finally { if (alive.current) setBusy(false); }
     if (!alive.current) return d;
     setData(d);
-    // Dropdown mengikuti jendela yang tersimpan, selama pengguna belum menyentuhnya.
+    // The dropdown follows the stored window, as long as the user has not touched it.
     if (!touched.current && d.found && d.scannedFrom && d.scannedTo) setBlocks(windowFor(d.scannedTo - d.scannedFrom));
     const running = d.job?.status === 'jalan';
     if (running && !timer.current) timer.current = setInterval(() => fetchWallet(), 2000);
@@ -280,15 +280,15 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
     return true;
   }, [address, blocks, fetchWallet]);
 
-  // Server bisa memulai pembaruan sendiri (target baru beraksi, atau data basi).
-  // Poll pelan ini yang membuat halaman yang dibiarkan terbuka ikut terbarui;
-  // begitu ada pekerjaan berjalan, fetchWallet pindah ke poll cepat 2 detik.
+  // The server can start an update by itself (a new target action, or stale data).
+  // This slow poll is what keeps a page left open up to date;
+  // as soon as there is work running, fetchWallet switches to a fast 2-second poll.
   useEffect(() => {
     const slow = setInterval(() => { if (!document.hidden && !timer.current) fetchWallet(); }, 30000);
     return () => clearInterval(slow);
   }, [fetchWallet]);
 
-  // muat saat alamat berganti; pindai otomatis kalau belum pernah
+  // load when the address changes; scan automatically if never scanned
   useEffect(() => {
     alive.current = true; touched.current = false;
     setData(null); setLoading(true); setHistId(null); stopPoll();
@@ -299,20 +299,20 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
       } finally { if (alive.current) setLoading(false); }
     })();
     return () => { alive.current = false; stopPoll(); };
-    // sengaja hanya bergantung pada alamat
+    // deliberately depends only on the address
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
   const job = data?.job;
   const running = job?.status === 'jalan';
-  // Kegagalan pembaruan latar (RPC sedang 429, dll.) cukup dicatat kecil — data
-  // tersimpan tetap tampil dan server akan mencoba lagi. Hanya pindai yang diminta
-  // pengguna yang layak kotak merah.
+  // A background refresh failure (RPC hit by 429, etc.) only needs a small note — the stored
+  // data stays shown and the server will try again. Only a scan requested by
+  // the user deserves a red box.
   const bgFailed = job?.status === 'gagal' && job.reason && job.reason !== 'manual';
   const s = data?.stats || {};
 
-  // Memilih jendela yang lebih lebar dari yang sudah terpindai = ingin melihat
-  // hari-hari sebelumnya; "Perbarui" tak pernah mundur, jadi langsung pindai penuh.
+  // Choosing a window wider than what has been scanned = wanting to see earlier
+  // days; "Refresh" never goes backwards, so scan fully right away.
   const pickWindow = (win) => {
     touched.current = true;
     setBlocks(win);

@@ -1,38 +1,38 @@
 'use strict';
-// Ongkos jalan sebuah posisi: gas yang terbakar dan selisih swap ("slippage"),
-// dipisah antara saat MEMBUKA dan saat MENUTUP.
+// Running cost of a position: gas burned and swap slippage ("slippage"),
+// split between OPENING and CLOSING.
 //
-// Kenapa perlu: PnL posisi cuma membandingkan modal dengan hasil. Yang tidak
-// terlihat di situ adalah biaya untuk sampai ke sana — beberapa transaksi gas
-// (approve, zap, mint, burn, jual sisa) dan selisih tiap swap antara nilai yang
-// masuk dan yang keluar. Di chain ini gas satu posisi ~$0,3 dan selisih swap bisa
-// $0,4–1 per posisi: pada posisi $100 itu sekitar 1%, cukup untuk membalik posisi
-// yang "untung tipis" menjadi rugi. Angkanya dipisah open/close supaya terbaca
-// bagian mana yang mahal.
+// Why it is needed: a position's PnL only compares capital with proceeds. What is not
+// visible there is the cost of getting there — several gas transactions
+// (approve, zap, mint, burn, leftover sale) and each swap's difference between the value
+// going in and coming out. On this chain the gas of one position is ~$0.3 and the swap difference can be
+// $0.4–1 per position: on a $100 position that is about 1%, enough to flip a
+// "thin profit" position into a loss. The figures are split open/close so it reads
+// which part is expensive.
 //
-// Semua diturunkan dari tabel `txs` yang sudah ada — tidak ada kolom baru:
-//   gas   = gas_used × gas_price (termasuk transaksi yang REVERT: gasnya tetap terbakar)
-//   slip  = usdIn − usdOut dari kutipan Kyber yang disimpan di detail tiap swap
-//           (fee pool + dampak harga + geseran harga saat eksekusi)
+// All of it is derived from the existing `txs` table — no new columns:
+//   gas   = gas_used × gas_price (including REVERTED transactions: the gas is still burned)
+//   slip  = usdIn − usdOut from the Kyber quote stored in each swap's detail
+//           (pool fee + price impact + price shift at execution)
 //
-// Transaksi ditautkan ke posisi lewat detail yang memang sudah ditulis mesin
-// (position / recorded / plan.positionId / positionSales), lewat tx_open & tx_close
-// posisinya, dan lewat keputusan yang menaut ke posisi. Transaksi pembantu — approve,
-// wrap/unwrap, zap, isi gas — tidak menyebut nomor posisi apa pun, jadi ia diikutkan
-// ke transaksi BERTUAN pertama sesudahnya (approve selalu mendahului swap/mint yang
-// membutuhkannya, dalam alur yang sama). Itu taksiran, bukan bukti: ongkos yang
-// tampil ditandai sebagai perkiraan.
+// Transactions are linked to a position via the detail the engine already writes
+// (position / recorded / plan.positionId / positionSales), via the position's tx_open & tx_close,
+// and via decisions that link to a position. Helper transactions — approve,
+// wrap/unwrap, zap, gas top-up — do not mention any position number, so each is attached
+// to the first OWNED transaction after it (an approve always precedes the swap/mint that
+// needs it, in the same flow). That is an estimate, not proof: the cost
+// shown is marked as approximate.
 
-// Fase menurut jenis transaksi. Yang tidak ada di sini (approve, wrap, isi gas)
-// mewarisi fase transaksi bertuan pertama sesudahnya.
+// Phase by transaction type. Those not listed here (approve, wrap, gas top-up)
+// inherit the phase of the first owned transaction after them.
 const OPEN_KIND = new Set(['mint', 'increase']);
 const CLOSE_KIND = new Set(['burn', 'decrease', 'sell_leftover']);
-// Transaksi pembantu: tidak pernah jadi jangkar, selalu ikut yang sesudahnya.
+// Helper transactions: never become an anchor, always follow what comes after.
 const HELPER_KIND = new Set(['approve_erc20', 'approve_permit2', 'approve_kyber', 'approve_router',
   'wrap_eth', 'unwrap_weth', 'gas_topup', 'zap_swap', 'bridge_swap']);
-// Batas waktu pembantu boleh diikutkan ke transaksi sesudahnya. Satu alur masuk
-// (approve → zap → approve → mint) selesai dalam hitungan detik sampai menit;
-// approve yatim dari alur yang batal tidak boleh dibebankan ke posisi lain.
+// Time limit within which a helper may be attached to the transaction after it. A single entry flow
+// (approve → zap → approve → mint) finishes within seconds to minutes;
+// an orphan approve from a cancelled flow must not be charged to another position.
 const HELPER_GAP_MS = 15 * 60_000;
 
 const parse = (d) => { try { return JSON.parse(d || '{}') || {}; } catch { return {}; } };
@@ -43,15 +43,15 @@ const emptyCost = () => ({
 });
 
 const gasEthOf = (t) => (t.gas_used && t.gas_price ? Number(BigInt(t.gas_used) * BigInt(t.gas_price)) / 1e18 : 0);
-// Gas dalam USD: yang dibukukan saat receipt (harga ETH saat itu) kalau ada,
-// selain itu dihitung dengan harga ETH sekarang — tx lama belum menyimpannya.
+// Gas in USD: the one booked at the receipt (the ETH price then) if present,
+// otherwise computed with the current ETH price — old txs did not store it.
 const gasUsdOf = (t, ethUsd) => (t.gas_quote != null ? Number(t.gas_quote) : gasEthOf(t) * ethUsd);
 
-// Ongkos swap dalam USD, dua bagian yang berbeda asalnya:
-//   route = kutipan masuk − kutipan keluar (fee pool + dampak harga rute)
-//   exec  = kutipan keluar − yang benar-benar diterima (geseran harga saat eksekusi)
-// Negatif (dapat lebih banyak dari taksiran) dibiarkan apa adanya — menolkannya
-// membuat total ongkos selalu terlihat lebih mahal dari kenyataan.
+// Swap cost in USD, two parts of different origin:
+//   route = quote in − quote out (pool fee + route price impact)
+//   exec  = quote out − what was actually received (price shift at execution)
+// A negative (received more than estimated) is left as it is — zeroing it
+// would make the total cost always look more expensive than reality.
 function swapCostOf(d) {
   const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : 0);
   const route = d.usdIn != null && d.usdOut != null ? num(d.usdIn) - num(d.usdOut) : 0;
@@ -61,13 +61,13 @@ function swapCostOf(d) {
 class Costs {
   constructor(store, network = 'robinhood') { this.store = store; this.network = network; this.cache = null; }
 
-  // Dihitung sekali untuk SEMUA posisi lalu di-cache: tabel posisi dipoll tiap
-  // beberapa detik dan menghitung per posisi berarti memindai txs berulang kali.
-  // Cache batal begitu ada transaksi baru/berubah (jumlah baris + waktu terakhir).
+  // Computed once for ALL positions then cached: the positions table is polled every
+  // few seconds and computing per position would mean scanning txs repeatedly.
+  // The cache is invalidated when a new/changed transaction appears (row count + last time).
   map(ethUsd) {
     const sig = this.store.get('SELECT COUNT(*) n, COALESCE(MAX(ts),0) last, COALESCE(SUM(gas_used),0) gas FROM txs WHERE chain=?', this.network);
-    // Harga ETH dibulatkan ke dolar penuh: ia hanya dipakai untuk transaksi lama yang
-    // belum menyimpan gas dalam USD, jadi tidak perlu menghitung ulang tiap sen.
+    // The ETH price is rounded to a whole dollar: it is only used for old transactions that
+    // have not stored gas in USD, so there is no need to recompute every cent.
     const key = `${sig?.n}:${sig?.last}:${sig?.gas}:${Math.round(ethUsd || 0)}`;
     if (this.cache?.key === key) return this.cache.map;
     const map = this.compute(ethUsd || 0);
@@ -97,7 +97,7 @@ class Costs {
       .map((d) => [d.tx_hash, d.position_id]));
     const txs = store.all('SELECT hash, ts, kind, status, gas_used, gas_price, gas_quote, detail FROM txs WHERE chain=? ORDER BY ts', this.network);
 
-    // 1) jangkar: transaksi yang jelas milik posisi tertentu
+    // 1) anchors: transactions clearly belonging to a specific position
     const anchor = new Array(txs.length).fill(null);   // {ids:[], phase}
     txs.forEach((t, i) => {
       if (HELPER_KIND.has(t.kind)) return;
@@ -113,19 +113,19 @@ class Costs {
         const hit = byToken.get(`${d.plan.venue || 'v4'}:${d.plan.tokenId}`);
         if (hit) ids.push(hit);
       }
-      // Satu penjualan sisa bisa menutup beberapa posisi sekaligus: ongkosnya dibagi rata.
+      // One leftover sale can close several positions at once: the cost is split evenly.
       for (const s of d.positionSales || []) if (Number.isInteger(s.position)) ids.push(s.position);
       const uniq = [...new Set(ids)];
       if (!uniq.length) return;
-      // Klaim fee, compound, swap manual: ongkos posisi ini juga, tapi bukan ongkos
-      // membuka maupun menutup — dikumpulkan terpisah supaya dua angka utamanya bersih.
+      // Fee claims, compounds, manual swaps: costs of this position too, but not
+      // open or close costs — collected separately so the two main figures stay clean.
       const phase = OPEN_KIND.has(t.kind) ? 'open' : CLOSE_KIND.has(t.kind) ? 'close' : 'lain';
       anchor[i] = { ids: uniq, phase };
     });
 
-    // 2a) zap yang SUDAH disebut namanya oleh mint/tambah — bukti, bukan taksiran.
-    //     Mint yang membawa daftar `zapped.hashes` berarti zap-nya persis itu; zap lain
-    //     di pool yang sama (mis. percobaan masuk yang batal) BUKAN ongkos posisi ini.
+    // 2a) zaps ALREADY named by a mint/add — proof, not an estimate.
+    //     A mint that carries a `zapped.hashes` list means its zap is exactly that one; another zap
+    //     in the same pool (e.g. a cancelled entry attempt) is NOT this position's cost.
     const zapOwner = new Map();
     const mintTellsZaps = new Map();
     txs.forEach((t, i) => {
@@ -135,8 +135,8 @@ class Costs {
       for (const h of z?.hashes || []) zapOwner.set(h, { ids: anchor[i].ids, phase: 'open' });
     });
 
-    // 2b) pembantu (approve/wrap/zap/isi gas) ikut jangkar pertama SESUDAHNYA — approve
-    //     selalu mendahului swap/mint yang membutuhkannya, dalam alur yang sama.
+    // 2b) helpers (approve/wrap/zap/gas top-up) follow the first anchor AFTER them — an approve
+    //     always precedes the swap/mint that needs it, in the same flow.
     for (let i = txs.length - 1; i >= 0; i--) {
       if (anchor[i] || !HELPER_KIND.has(txs[i].kind)) continue;
       const own = zapOwner.get(txs[i].hash);
@@ -145,10 +145,10 @@ class Costs {
         if (!anchor[j]) continue;
         if (txs[j].ts - txs[i].ts > HELPER_GAP_MS) break;
         if (txs[i].kind === 'zap_swap') {
-          // Zap hanya menempel pada mint/tambah yang sesungguhnya, di pool yang sama,
-          // dan hanya kalau mint itu TIDAK menyebutkan daftar zap-nya sendiri (kalau
-          // zap ini miliknya, namanya pasti ada di daftar itu). Tanpa ketiganya, zap
-          // dari percobaan masuk yang BATAL ikut terbebankan ke posisi berikutnya.
+          // A zap only attaches to a real mint/add, in the same pool,
+          // and only if that mint does NOT name its own zap list (if
+          // this zap is its, its name would certainly be in that list). Without all three, a zap
+          // from a CANCELLED entry attempt is charged to the next position too.
           if (txs[j].kind !== 'mint' && txs[j].kind !== 'increase') continue;
           const zapPool = parse(txs[i].detail).pool;
           const anchorPool = parse(txs[j].detail).pool || parse(txs[j].detail).plan?.poolRef;
@@ -160,7 +160,7 @@ class Costs {
       }
     }
 
-    // 3) jumlahkan
+    // 3) sum up
     txs.forEach((t, i) => {
       const a = anchor[i];
       if (!a) return;

@@ -27,4 +27,4 @@ localeContext.run('en', () => {
  assert.equal(tr('✅ Posisi #{0} ditutup.{1}{2}\nTx: <code>{3}</code>', [9, '', '', '0x123']),
  '✅ Position #9 closed.\nTransaction: <code>0x123</code>');
 });
-console.log(`${cases.length + 4} pemeriksaan copy lulus; ${Object.keys(en).length} terjemahan Inggris tervalidasi`);
+console.log(`${cases.length + 4} copy checks passed; ${Object.keys(en).length} English translations validated`);

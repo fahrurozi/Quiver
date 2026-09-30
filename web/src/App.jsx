@@ -20,7 +20,7 @@ import SearchModal, { SearchTrigger } from './components/GlobalSearch';
 import { Loading, ConfirmHost, WalletLinks, ask } from './components/ui';
 import { hideSplash } from './splash';
 
-// Tiap halaman dimuat saat dibuka — pustaka grafik cuma diunduh untuk Ringkasan.
+// Each page is loaded when opened — the chart library is only downloaded for the Summary.
 const Overview = lazy(() => import('./pages/Overview'));
 const Monitor = lazy(() => import('./pages/Monitor'));
 const Positions = lazy(() => import('./pages/Positions'));
@@ -32,11 +32,11 @@ const Settings = lazy(() => import('./pages/Settings'));
 const ManualLp = lazy(() => import('./pages/ManualLp'));
 const Swap = lazy(() => import('./pages/Swap'));
 const Learn = lazy(() => import('./pages/Learn'));
-// Tidak ada di menu: dibuka dari lambang token (#token/0x…) dan nama pasangan (#pool/0x…).
+// Not in the menu: opened from a token icon (#token/0x…) and a pair name (#pool/0x…).
 const TokenDetail = lazy(() => import('./pages/TokenDetail'));
 const PoolDetail = lazy(() => import('./pages/PoolDetail'));
 
-// Status mesin dipoll SEKALI di sini lalu dibagi ke semua halaman.
+// The engine status is polled ONCE here and then shared to all pages.
 const StatusCtx = createContext(null);
 export const useStatus = () => useContext(StatusCtx);
 
@@ -63,8 +63,8 @@ const NAV = [
     ['settings', 'Pengaturan', SettingsIcon, Settings],
   ]],
 ];
-// #scout dulu halaman sendiri; isinya sekarang ada di dalam Wallet. Tautan lama
-// (bookmark, pesan Telegram) tetap mendarat di tempat yang benar.
+// #scout used to be its own page; its content is now inside Wallet. Old links
+// (bookmarks, Telegram messages) still land in the right place.
 const PAGES = { ...Object.fromEntries(NAV.flatMap(([, items]) => items.map(([id, , , C]) => [id, C]))), scout: WalletPage, token: TokenDetail, pool: PoolDetail };
 
 function NavLinks({ page, onPick }) {
@@ -92,7 +92,7 @@ function NavLinks({ page, onPick }) {
   );
 }
 
-// Warna & teks mode dipakai di sidebar dan header HP — satu sumber.
+// Mode colours & text are used in the sidebar and the mobile header — one source.
 const modeOf = (m) => (!m ? null : m.paused ? ['Dijeda', 'bg-muted', 'text-muted']
   : m.drawdown?.tripped ? ['Drawdown', 'bg-warning', 'text-warning']
   : m.dry_run ? ['Simulasi', 'bg-accent', 'text-accent'] : ['Live', 'bg-danger', 'text-danger']);
@@ -113,9 +113,9 @@ function ModeBadge({ m }) {
   );
 }
 
-// Sensor nilai portofolio (privacy.js): ikon mata di sebelah tombol tema. Satu
-// sakelar untuk semua — tersimpan di server, jadi tab, perangkat, dan mini app lain
-// ikut dalam satu putaran poll.
+// Portfolio value redaction (privacy.js): the eye icon next to the theme button. One
+// switch for all — stored on the server, so other tabs, devices, and the mini app
+// follow within one poll round.
 function PrivacyButton({ hidden, toggle }) {
   const { t } = useI18n();
   const label = t(hidden ? 'Tampilkan nilai portofolio' : 'Sensor nilai portofolio');
@@ -131,7 +131,7 @@ function StatusFoot({ status, reload, theme, toggleTheme, privacy }) {
   const { t, locale, setLocale } = useI18n();
   const m = status?.mode;
   const pause = async () => { await post('/api/mode', { paused: !m?.paused }); reload(); };
-  // Bukan lewat api.post: /logout membalas redirect ke halaman masuk, bukan JSON.
+  // Not via api.post: /logout replies with a redirect to the sign-in page, not JSON.
   const logout = async () => {
     if (!(await ask({ title: t('Keluar dari dasbor?'), body: t('Untuk masuk lagi perlu token akses.'), confirm: t('Keluar dari dasbor') }))) return;
     await fetch('/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
@@ -187,9 +187,9 @@ function StatusFoot({ status, reload, theme, toggleTheme, privacy }) {
   );
 }
 
-// Pemilih chain di bawah logo. Satu dasbor menampilkan satu chain; memilih chain lain
-// menyimpan cookie lpcopy_chain di server lalu memuat ulang halaman supaya semua
-// data yang sedang dipoll ikut berganti. Wallet-nya sama di semua chain.
+// Chain picker under the logo. One dashboard shows one chain; choosing another chain
+// saves the lpcopy_chain cookie on the server then reloads the page so all
+// data being polled changes too. The wallet is the same on all chains.
 function ChainSwitcher({ chain }) {
   const { t } = useI18n();
   const { data } = usePoll('/api/chains', 15000);
@@ -203,7 +203,7 @@ function ChainSwitcher({ chain }) {
     if (r?.ok) location.reload();
   };
   const icon = CHAIN_ICON[cur.key] || CHAIN_ICON.robinhood;
-  // Satu chain saja: tampilkan labelnya tanpa menu.
+  // A single chain: show its label without a menu.
   if (chains.length <= 1) {
     return (
       <span className="brand-sub flex items-center gap-1.5 text-[0.6875rem] leading-4 text-muted">
@@ -253,7 +253,7 @@ function ChainSwitcher({ chain }) {
 
 function Brand({ chain }) {
   return (
-    // data-brand/data-brand-logo: tujuan logo layar pembuka saat terbang ke header
+    // data-brand/data-brand-logo: the destination of the splash logo when it flies to the header
     <div data-brand className="flex shrink-0 flex-col items-start gap-2 text-foreground">
       <a href="#summary" aria-label="Quiver"><QuiverLogo className="h-[22px] w-[121px]" data-brand-logo="" /></a>
       <ChainSwitcher chain={chain} />
@@ -263,33 +263,33 @@ function Brand({ chain }) {
 
 export default function App() {
   const { t } = useI18n();
-  // Rute berbentuk "halaman/parameter", mis. #target/0xabc… membuka detail satu wallet.
+  // Routes of the form "page/parameter", e.g. #target/0xabc… opens the detail of a single wallet.
   const [page, ...rest] = useHash('summary').split('/');
   const param = rest.join('/') || null;
   const [theme, toggleTheme] = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Sensor nilai: App ikut tergambar ulang saat sakelarnya berubah, jadi seluruh
-  // halaman memformat ulang angkanya lewat usd()/fmtQty() yang sudah tahu keadaannya.
+  // Value redaction: App is redrawn when its switch changes, so the whole
+  // page reformats its numbers via usd()/fmtQty(), which already know the state.
   const privacy = usePrivacy();
   const { data: status, error: statusError, reload } = usePoll('/api/overview', 5000);
-  // Layar pembuka ditutup begitu status pertama (atau galatnya) tiba.
+  // The splash screen closes as soon as the first status (or its error) arrives.
   useEffect(() => { if (status || statusError) hideSplash(); }, [status, statusError]);
-  // Identitas chain (simbol native, penjelajah, slug DexScreener) dibagikan ke pembantu
-  // non-React lewat chain.js begitu status pertama tiba.
+  // The chain identity (native symbol, explorer, DexScreener slug) is shared with non-React
+  // helpers via chain.js as soon as the first status arrives.
   useEffect(() => { if (status?.chain?.key) setChain(status.chain); }, [status?.chain?.key]);
-  // Kurs mata uang kedua ikut di poll yang sama; komponen <Fx> yang membacanya.
+  // The secondary currency rate rides on the same poll; the <Fx> component reads it.
   useEffect(() => { setFx(status?.fx || null); }, [status?.fx?.currency, status?.fx?.rate]);
-  // Sensor nilai bawaan dari Pengaturan → Tampilan; ikon mata menimpanya per tab.
+  // The default value redaction from Settings → Display; the eye icon overrides it per tab.
   useEffect(() => { if (status && 'hideValues' in status) setDefaultHidden(status.hideValues); }, [status?.hideValues]);
   const chain = status?.chain?.key ? status.chain : chainInfo();
-  // Judul tab ikut angka hidup: "Quiver · $1.234,56 · +$56,78" (digulir, lihat setBaseTitle) — total portofolio dan
-  // PnL (bersih kalau modal terlacak, kalau tidak PnL posisi), sama dengan kartu di
-  // Ringkasan. Dibaca dari sebelah tab lain tanpa membuka dasbornya.
+  // The tab title follows the live figures: "Quiver · $1,234.56 · +$56.78" (scrolling, see setBaseTitle) — portfolio total and
+  // PnL (net if capital is tracked, otherwise position PnL), the same as the card on the
+  // Summary. Readable from beside another tab without opening the dashboard.
   const w = status?.wallet;
   useEffect(() => {
     if (!w) return;
     const pnl = w.netPnl ?? w.pnl;
-    // Sensor nilai: judul tab terbaca dari mana saja (taskbar, rekaman layar) — kosongkan.
+    // Value redaction: the tab title is readable from anywhere (taskbar, screen recording) — blank it.
     setBaseTitle(privacy[0] ? 'Quiver' : `Quiver · ${usd(w.value)} · ${pnl > 0 ? '+' : ''}${usd(pnl)}`);
   }, [w?.value, w?.pnl, w?.netPnl, privacy[0]]);
   const Page = PAGES[page] || Overview;

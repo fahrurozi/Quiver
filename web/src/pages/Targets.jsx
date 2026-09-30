@@ -10,7 +10,7 @@ import WalletHoldings from '../components/WalletHoldings';
 import { usd, kUsd, tone, ago, short } from '../fmt';
 import { useI18n } from '../i18n';
 
-// Editor aturan per-target — dipakai di kartu (dilipat) dan di halaman detail.
+// Per-target rules editor — used in the card (collapsed) and on the detail page.
 function TargetRules({ tg, onChanged }) {
   const { t } = useI18n();
   const [rules, setRules] = useState(tg.rulesResolved);
@@ -36,7 +36,7 @@ function TargetRules({ tg, onChanged }) {
   );
 }
 
-// Ringkasan PnL dari hasil riset yang tersimpan (tanpa memanggil chain).
+// PnL summary from the stored research result (without calling the chain).
 function Research({ r }) {
   const { t } = useI18n();
   if (!r) return <span className="text-xs text-muted">{t('Belum dipindai')}</span>;
@@ -51,25 +51,25 @@ function Research({ r }) {
 const signed = (v) => (v > 0.005 ? '+' : '') + usd(v);
 const oursTotal = (o) => (o ? o.realized + o.upnl : 0);
 
-// Uang TARGET sendiri: kas di walletnya + nilai posisi LP-nya yang masih terbuka.
-// Wallet yang sisanya tinggal beberapa puluh dolar praktis sudah berhenti nge-LP,
-// jadi angkanya diberi warna — wallet mati terlihat tanpa membuka detailnya satu
-// per satu, dan aksinya (matikan / hapus) bisa langsung diambil dari daftar.
-const DEAD_USD = 50;    // sudah habis: hampir pasti tidak nge-LP lagi
-const LOW_USD = 100;    // tipis: masih mungkin, tapi ukurannya sudah kecil
+// The TARGET's own money: cash in its wallet + the value of its still-open LP positions.
+// A wallet with only a few tens of dollars left has practically stopped LPing,
+// so the figure is coloured — a dead wallet is visible without opening each detail
+// one by one, and the action (disable / delete) can be taken straight from the list.
+const DEAD_USD = 50;    // used up: almost certainly no longer LPing
+const LOW_USD = 100;    // thin: still possible, but the size is already small
 const balKnown = (b) => !!b && (b.cashUsd != null || b.lpUsd != null);
-// Sisi yang belum terbaca ditulis "—": "$0" akan terbaca sebagai wallet kosong.
+// A side not yet read is written "—": "$0" would read as an empty wallet.
 const money = (v) => (v == null ? '—' : usd(v, 0));
 const balTotal = (b) => (b ? (b.cashUsd || 0) + (b.lpUsd || 0) : 0);
-// Diwarnai hanya kalau KEDUA sisinya sudah terbaca — wallet yang belum diriset
-// LP-nya tidak diketahui, bukan nol, dan tidak boleh tampil seolah modalnya habis.
+// Coloured only if BOTH sides have been read — a wallet whose LP has not been researched
+// is unknown, not zero, and must not appear as if its capital is gone.
 const balTone = (b) => {
   if (!b || b.cashUsd == null || b.lpUsd == null) return '';
   const v = balTotal(b);
   return v < DEAD_USD ? 'text-danger' : v < LOW_USD ? 'text-warning' : '';
 };
 
-function Saldo({ b }) {
+function Balance({ b }) {
   const { t } = useI18n();
   if (!balKnown(b)) return <span className="text-xs text-muted">{t('Belum terbaca')}</span>;
   const tip = [
@@ -84,9 +84,9 @@ function Saldo({ b }) {
   );
 }
 
-// Hasil posisi KITA yang disalin dari wallet ini: terealisasi (sudah ditutup) +
-// berjalan (posisi yang masih terbuka). Diletakkan di samping PnL wallet supaya
-// "dia dapat berapa" dan "kita dapat berapa" terbaca berdampingan.
+// The result of OUR positions copied from this wallet: realized (already closed) +
+// running (positions still open). Placed beside the wallet PnL so
+// "what they got" and "what we got" read side by side.
 function Ours({ o }) {
   const { t } = useI18n();
   if (!o) return <span className="text-xs text-muted">{t('Belum ada posisi')}</span>;
@@ -101,7 +101,7 @@ function Ours({ o }) {
   );
 }
 
-// Rekap di atas daftar: total yang kita dapat dari semua wallet yang diikuti.
+// Recap above the list: the total we got from all the wallets being followed.
 function Recap({ list }) {
   const { t } = useI18n();
   const rows = list.filter((x) => x.ours);
@@ -123,10 +123,10 @@ function Recap({ list }) {
   );
 }
 
-// Sakelar dibuat optimistis. /api/targets ikut menghitung riset tiap wallet, jadi
-// balasannya bisa beberapa detik saat RPC sedang kena 429; tanpa ini sakelar diam di
-// posisi lama sampai balasan datang — persis seperti tidak bisa diklik. Nilai lokal
-// dipakai sampai server menyetujuinya.
+// The switch is optimistic. /api/targets also computes the research of every wallet, so
+// its reply can take a few seconds when the RPC is being hit with 429; without this the switch stays in the
+// old position until the reply arrives — exactly like it could not be clicked. The local value
+// is used until the server agrees.
 function useToggles(targets, reload) {
   const [pending, setPending] = useState({});
   useEffect(() => {
@@ -135,7 +135,7 @@ function useToggles(targets, reload) {
       const next = {}; let changed = false;
       for (const [addr, want] of Object.entries(p)) {
         const srv = targets.find((x) => x.address === addr);
-        if (srv && !!srv.enabled === want) { changed = true; continue; }   // server sudah setuju
+        if (srv && !!srv.enabled === want) { changed = true; continue; }   // the server has agreed
         next[addr] = want;
       }
       return changed ? next : p;
@@ -154,8 +154,8 @@ function useToggles(targets, reload) {
   return { enabledOf, toggle };
 }
 
-// Satu baris daftar target. Kolomnya sejajar antarbaris (grid yang sama) supaya
-// PnL, aktivitas, dan posisi bisa dibandingkan menurun seperti tabel.
+// One row of the target list. The columns align across rows (the same grid) so
+// PnL, activity, and positions can be compared downward like a table.
 const ROW = 'grid items-center gap-x-4 gap-y-2 grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-[auto_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,0.65fr)_minmax(0,0.9fr)_auto]';
 
 function TargetRow({ tg, enabled, onToggle, onChanged }) {
@@ -194,7 +194,7 @@ function TargetRow({ tg, enabled, onToggle, onChanged }) {
             <WalletLinks address={tg.address} compact className="ml-2" />
           </div>
         </div>
-        <div className="hidden min-w-0 md:block"><Saldo b={tg.balance} /></div>
+        <div className="hidden min-w-0 md:block"><Balance b={tg.balance} /></div>
         <div className="hidden md:block"><Research r={tg.research} /></div>
         <div className="hidden min-w-0 md:block"><Ours o={tg.ours} /></div>
         <div className="num hidden text-sm md:block">
@@ -226,7 +226,7 @@ function TargetRow({ tg, enabled, onToggle, onChanged }) {
   );
 }
 
-// Nama target bisa diubah langsung di tempat — alamat 0x… sulit dibedakan satu sama lain.
+// A target's name can be edited in place — 0x… addresses are hard to tell apart.
 function EditableLabel({ tg, onChanged }) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
@@ -257,7 +257,7 @@ function EditableLabel({ tg, onChanged }) {
   );
 }
 
-// Halaman detail satu target: status copy + riset wallet lengkap (sama dengan menu Wallet).
+// Detail page of a single target: copy status + full wallet research (same as the Wallet menu).
 function TargetDetail({ address, targets, reload, enabledOf, onToggle }) {
   const { t } = useI18n();
   const tg = targets.find((x) => x.address === address.toLowerCase());
@@ -344,7 +344,7 @@ export default function Targets({ param }) {
 
   const list = d?.targets || [];
   const on = list.filter((x) => enabledOf(x)).length;
-  // Yang aktif ditaruh di atas supaya langsung terlihat, tanpa mengubah urutan sesama status.
+  // Active ones go on top so they are visible right away, without changing the order among equal statuses.
   const sorted = [...list].sort((a, b) => (enabledOf(b) ? 1 : 0) - (enabledOf(a) ? 1 : 0));
   return (
     <>

@@ -16,14 +16,14 @@ import { useClosePosition } from '../useClosePosition';
 
 const RANGES = [['24h', '24 jam'], ['7d', '7 hari'], ['30d', '30 hari'], ['all', 'Semua']];
 const VIEWS = [['pnl', 'PnL kumulatif'], ['value', 'Nilai']];
-// PnL bersih hanya ada kalau modal wallet terlacak (setoran/penarikan dari RPC).
+// Net PnL only exists if the wallet capital is tracked (deposits/withdrawals from RPC).
 const VIEWS_NET = [['net', 'PnL bersih'], ...VIEWS];
 const sum = (rows, f) => rows.reduce((a, r) => a + (f(r) || 0), 0);
 
-// Jembatan PnL kumulatif → PnL bersih. Dua angka "PnL" yang beda $20-an tanpa
-// keterangan terbaca sebagai bug. Selisihnya biaya yang dibayar dari wallet di luar
-// posisi: gas (dihitung dari tabel txs) dan sisanya — slippage swap, pergerakan
-// harga ETH yang dipegang — yang tidak bisa dipisah satu per satu.
+// Bridge cumulative PnL → net PnL. Two "PnL" figures that differ by $20-ish without
+// explanation read as a bug. The difference is costs paid from the wallet outside
+// positions: gas (computed from the txs table) and the rest — swap slippage, movement of
+// the ETH price being held — which cannot be separated one by one.
 function PnlGap({ p }) {
   const { t } = useI18n();
   const n = p.now, c = p.capital;
@@ -74,16 +74,16 @@ function PnlGap({ p }) {
   );
 }
 
-// Ke mana uangnya. Pertanyaan utama untuk bot LP: berapa bagian dana yang benar-benar
-// bekerja di posisi, berapa yang menganggur di kas. Satu batang bertumpuk (bagian dari
-// keseluruhan) dengan dua keluarga warna — biru = bekerja, abu = kas — dan daftar
-// yang dikelompokkan sama. Identitas tiap potong tidak hanya dari warna: tiap baris
-// punya kotak warnanya, dan menyorot baris/potong saling menyalakan.
+// Where the money is. The main question for an LP bot: what share of funds is really
+// working in positions, what share is idle as cash. A single stacked bar (parts of the
+// whole) with two colour families — blue = working, grey = cash — and the list
+// grouped the same. Each slice's identity is not from colour alone: every row
+// has its colour box, and highlighting a row/slice lights up the other.
 function Composition({ now, ethUsd }) {
   const { t } = useI18n();
   const [hot, setHot] = useState(null);
   const c = now.cash;
-  const ethVal = c ? (c.usd - c.usdg) : 0;            // nilai ETH+WETH saat kas dibaca
+  const ethVal = c ? (c.usd - c.usdg) : 0;            // ETH+WETH value when the cash was read
   const perEth = c && c.eth + c.weth > 0 ? ethVal / (c.eth + c.weth) : ethUsd;
   const tint = (base, pct) => `color-mix(in oklab, ${base} ${pct}%, var(--surface))`;
   const working = [
@@ -103,8 +103,8 @@ function Composition({ now, ethUsd }) {
   const fmtPct = (v) => `${num(share(v), share(v) < 10 ? 1 : 0)}%`;
   const dimmed = (k) => hot != null && hot !== k;
 
-  // fungsi render biasa, bukan komponen: komponen yang dibuat ulang tiap render akan
-  // dipasang ulang saat sorotan berubah dan hover-nya berkedip
+  // an ordinary render function, not a component: a component recreated on every render would
+  // be remounted when the highlight changes and its hover would flicker
   const item = (r) => (
     <div key={r.k} className={`flex items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm transition-colors ${hot === r.k ? 'bg-default/60' : ''}`}
       onMouseEnter={() => setHot(r.k)} onMouseLeave={() => setHot(null)}>
@@ -166,7 +166,7 @@ function Composition({ now, ethUsd }) {
       </div>
       <div className="mt-2 divide-y divide-border border-t border-border">
         {now.capitalNet != null
-          // modal nyata: baseline + setoran − penarikan (capital.js) — sama dengan kartu PnL bersih
+          // real capital: baseline + deposits − withdrawals (capital.js) — the same as the net PnL card
           ? <KV label="Modal bersih" fx={now.capitalNet}><span title={t('Nilai wallet saat bot mulai mencatat + setoran − penarikan')}>{usd(now.capitalNet)}</span></KV>
           : now.capital != null && (
           <KV label="Modal bersih" fx={now.capital}><span title={t('Nilai sekarang dikurangi seluruh PnL — kira-kira dana yang disetor ke wallet bot')}>{usd(now.capital)}</span></KV>
@@ -177,16 +177,16 @@ function Composition({ now, ethUsd }) {
   );
 }
 
-// Kinerja per sumber: target mana yang benar-benar menghasilkan setelah disalin.
-// Batang divergen dari satu garis nol — untung ke kanan (hijau), rugi ke kiri
-// (merah) — supaya sumber yang merugi terbaca sebagai rugi, bukan batang pendek.
+// Performance per source: which targets really earn after being copied.
+// Diverging bars from a single zero line — profit to the right (green), loss to the left
+// (red) — so a losing source reads as a loss, not as a short bar.
 function BySource({ rows }) {
   const { t } = useI18n();
   if (!rows.length) return <div className="p-4"><Empty title="Belum ada posisi" /></div>;
   const tots = rows.map((r) => r.realized + r.upnl);
   const maxPos = Math.max(0, ...tots), maxNeg = Math.max(0, ...tots.map((v) => -v));
   const span = Math.max(1e-9, maxPos + maxNeg);
-  const zero = (maxNeg / span) * 100;   // letak garis nol dalam persen lebar
+  const zero = (maxNeg / span) * 100;   // position of the zero line in percent of the width
   return (
     <div className="divide-y divide-border">
       {rows.map((r, i) => {
@@ -221,7 +221,7 @@ function BySource({ rows }) {
   );
 }
 
-// Ringkasan posisi ditutup: empat angka dalam kisi, bukan daftar label panjang.
+// Closed positions summary: four figures in a grid, not a long list of labels.
 function ClosedStats({ st }) {
   const { t } = useI18n();
   const cells = [
@@ -242,10 +242,10 @@ function ClosedStats({ st }) {
   );
 }
 
-// Delapan angka milidetik berjajar tidak bisa dibaca sekilas. Yang dicari mata:
-// "apakah RPC-nya sehat?" — jadi tampilkan median, dan sisanya di tooltip.
-// Sisa jatah salin: ruang yang masih tersisa di tiap plafon aturan umum. Batang penuh =
-// plafon habis — posisi berikutnya akan dilewati dengan alasan itu.
+// Eight millisecond figures side by side cannot be read at a glance. What the eye looks for:
+// "is the RPC healthy?" — so show the median, and the rest in a tooltip.
+// Remaining copy quota: the room still left under each general rule ceiling. A full bar =
+// ceiling used up — the next position will be skipped for that reason.
 function CopyRoom({ room, dryRun }) {
   const { t } = useI18n();
   const bar = ({ label, used, limit, left, fmt = usd, sub }) => {
@@ -285,9 +285,9 @@ function Latency({ rpc }) {
   if (!ms.length) return <span className="text-muted">—</span>;
   const med = ms[Math.floor(ms.length / 2)];
   const cooling = rpc.filter((r) => r.cooling).length;
-  const judul = rpc.map((r) => `${r.host} · ${r.lastMs} ms${r.cooling ? ' · istirahat' : ''}${r.errors ? ` · ${r.errors} error` : ''}`).join('\n');
+  const heading = rpc.map((r) => `${r.host} · ${r.lastMs} ms${r.cooling ? ' · istirahat' : ''}${r.errors ? ` · ${r.errors} error` : ''}`).join('\n');
   return (
-    <span title={judul}>
+    <span title={heading}>
       {t('{n} ms', { n: med })}
       <span className="ml-1.5 font-normal text-muted">{t('median · {n} RPC', { n: rpc.length })}</span>
       {cooling > 0 && <span className="ml-1.5 font-normal text-warning">{t('{n} istirahat', { n: cooling })}</span>}
@@ -295,8 +295,8 @@ function Latency({ rpc }) {
   );
 }
 
-// PnL per hari dikelompokkan di browser supaya "hari" mengikuti zona waktu pengguna,
-// bukan zona waktu server.
+// PnL per day is grouped in the browser so the "day" follows the user's time zone,
+// not the server's time zone.
 function dailyOf(closed) {
   const daily = {}, counts = {};
   const pad = (n) => String(n).padStart(2, '0');
@@ -309,10 +309,10 @@ function dailyOf(closed) {
   return { daily, counts };
 }
 
-// Volume swap pool-nya (DexScreener) — dari sinilah fee datang. Tanpa angka ini
-// kolom Fee $0,00 tidak bisa dibaca: pool sepi, atau posisi yang di luar rentang?
-// 24 jam untuk ukuran pool-nya, 1 jam karena posisi yang baru dibuka 20 menit lalu
-// tidak ikut menikmati volume kemarin.
+// The pool's swap volume (DexScreener) — this is where fees come from. Without this figure
+// the Fee $0.00 column cannot be read: a quiet pool, or a position out of range?
+// 24 hours for the pool's size, 1 hour because a position opened 20 minutes ago
+// did not enjoy yesterday's volume.
 function VolCell({ pair }) {
   const { t } = useI18n();
   const v = pair?.volume;
@@ -326,17 +326,17 @@ function VolCell({ pair }) {
   );
 }
 
-// Seberapa besar pool-nya, dan seberapa besar kita di dalamnya. Dua LP $120 yang
-// terlihat sama sekali-sekali tidak sama: satu memegang 0,1% pool sedalam $4 juta,
-// satu lagi 12% pool $1.000 — yang kedua menggerakkan harganya sendiri saat keluar.
+// How big the pool is, and how big we are in it. Two $120 LPs that
+// look the same are not the same at all: one holds 0.1% of a $4 million deep pool,
+// the other 12% of a $1,000 pool — the second moves its own price when it exits.
 function LiqCell({ pair, p }) {
   const { t } = useI18n();
   const liq = pair?.liquidityUsd;
   if (!pair) return <span className="text-muted">—</span>;
   if (liq == null) return <span className="text-muted" title={t('Pool ini belum terindeks di DexScreener.')}>—</span>;
-  // Bagian kita = nilai posisi terhadap seluruh likuiditas pool. Kasar: DexScreener
-  // menghitung seluruh isi pool, bukan cuma likuiditas yang aktif di rentang harga
-  // sekarang — jadi bagian nyata kita atas fee bisa lebih besar dari angka ini.
+  // Our share = the position value against the pool's whole liquidity. Rough: DexScreener
+  // counts everything in the pool, not just the liquidity active in the current
+  // price range — so our real share of the fees can be larger than this figure.
   const share = liq > 0 && p.valueUsd > 0 ? (p.valueUsd / liq) * 100 : null;
   return (
     <div className="whitespace-nowrap" title={t('Seluruh isi pool menurut DexScreener. Bagian kita dihitung dari nilai posisi terhadap angka itu — bukan terhadap likuiditas yang aktif di rentang harga sekarang.')}>
@@ -349,57 +349,57 @@ function LiqCell({ pair, p }) {
 export default function Overview() {
   const { t } = useI18n();
   const { status: d } = useStatus();
-  // Rentang awal: seluruh riwayat. Pertanyaan pertama yang dibawa orang ke halaman
-  // ini adalah "sejak awal untung berapa", bukan minggu terakhirnya.
+  // Initial range: the whole history. The first question people bring to this page
+  // is "how much profit since the beginning", not the last week.
   const [range, setRange] = useState('all');
-  // Tampilan awal: PnL bersih kalau modal terlacak; kalau tidak, PnL kumulatif.
+  // Initial view: net PnL if capital is tracked; otherwise cumulative PnL.
   const [viewPick, setView] = useState('net');
-  const [shareDay, setShareDay] = useState(null);   // 'YYYY-MM-DD' yang diklik di kalender
+  const [shareDay, setShareDay] = useState(null);   // the 'YYYY-MM-DD' clicked in the calendar
   const { data: p, reload: reloadPortfolio } = usePoll('/api/portfolio?range=' + range, 30000);
-  // Sama dengan halaman Posisi: endpoint murah, jadi posisi baru muncul dalam ~5 detik.
+  // The same as the Positions page: a cheap endpoint, so a new position appears within ~5 seconds.
   const { data: pos, reload: reloadPos } = usePoll('/api/positions', 5000);
-  // Klik baris posisi aktif -> laci riwayat yang sama dengan halaman Posisi (PnL,
-  // komposisi token, transaksi); nama token tetap menaut ke halaman tokennya.
+  // Click an active position row -> the same history drawer as the Positions page (PnL,
+  // token composition, transactions); the token name still links to its token page.
   const [hist, setHist] = useState(null);
   const { data: tx } = usePoll('/api/txs', 10000);
-  // Volume pool untuk kolom Volume di tabel posisi aktif. Endpoint yang sama dengan
-  // kartu Monitor (DexScreener, sudah di-memo per pool di server), jadi cukup sekali
-  // per menit — ini konteks pasar, bukan angka posisi yang harus berdetak.
+  // Pool volume for the Volume column in the active positions table. The same endpoint as
+  // the Monitor card (DexScreener, already memoised per pool on the server), so once
+  // a minute is enough — this is market context, not a position figure that must tick.
   const pools = useMemo(() => [...new Set((pos?.positions || [])
     .filter((x) => !x.empty)
     .map((x) => String(x.pool_ref || '').toLowerCase())
     .filter(Boolean))].sort(), [pos]);
   const { data: mk } = usePoll(pools.length ? `/api/monitor/market?pools=${pools.join(',')}` : null, 60000);
-  // Satu sinkron chain menyegarkan SELURUH halaman, bukan cuma tabelnya: kartu total
-  // portofolio dan PnL dihitung dari hasil sinkron yang sama, dan dua angka untuk
-  // hal yang sama dengan umur berbeda di satu layar adalah bug yang terlihat.
+  // One chain sync refreshes the WHOLE page, not just the table: the portfolio total
+  // card and PnL are computed from the same sync result, and two figures for
+  // the same thing with different ages on one screen is a visible bug.
   const reloadAll = useCallback(async () => {
     await Promise.all([reloadPos(), reloadPortfolio()]);
   }, [reloadPos, reloadPortfolio]);
   const [resync, syncing] = useResync(reloadAll);
-  // Tombol darurat "tutup paksa semua" — sama dengan yang di halaman Posisi, dipakai
-  // dari ringkasan supaya tidak perlu pindah halaman dulu saat pasar bergerak cepat.
+  // The emergency "force close all" button — the same as on the Positions page, used
+  // from the summary so there is no need to switch pages first when the market moves fast.
   const { forceCloseAll, closing } = useClosePosition(reloadAll);
   if (!d) return <Loading page />;
   const s = d.summary, T = d.totals || {};
-  // Kursor bisa sedikit MENDAHULUI kepala rantai yang terakhir dibaca; itu sinkron,
-  // bukan "tertinggal −19 blok".
+  // The cursor can slightly LEAD the chain head last read; that is sync,
+  // not "lagging −19 blocks".
   const lag = Math.max(0, d.chain.lag);
-  // Dua menit tanpa satu pun pemindaian berhasil sudah jauh di luar irama normal
-  // (satu siklus tiap 1,5 detik) — itu bukan RPC lambat lagi, itu macet.
+  // Two minutes without a single successful scan is far outside the normal rhythm
+  // (one cycle every 1.5 seconds) — that is no longer a slow RPC, it is stuck.
   const scanStale = !d.chain.lastScan || Date.now() - d.chain.lastScan > 120_000;
   const maxSkip = Math.max(1, ...(d.skipReasons || []).map((r) => r.n));
   const now = p?.now, st = p?.stats;
   const view = viewPick === 'net' && now?.netPnl == null ? 'pnl' : viewPick;
   const open = (pos?.positions || []).filter((x) => !x.empty);
-  // Posisi yang belum ikut sinkron chain: nilai masih taksiran modal, fee & PnL belum ada.
+  // A position not yet synced with the chain: the value is still the capital estimate, fee & PnL do not exist yet.
   const pendingSync = open.filter((x) => x.syncing).length;
   const dash = (x, node) => (x.syncing ? <span className="text-muted">—</span> : node);
   const pairOf = (x) => mk?.pairs?.[String(x.pool_ref || '').toLowerCase()] || null;
   const cal = p ? dailyOf(p.closed) : null;
-  // Kesehatan LP dihitung dari daftar posisi yang sama dengan tabel di bawah, bukan
-  // dari ringkasan mesin: dua angka untuk hal yang sama dengan umur berbeda di satu
-  // layar adalah bug yang terlihat.
+  // LP health is computed from the same position list as the table below, not
+  // from the engine summary: two figures for the same thing with different ages on one
+  // screen is a visible bug.
   const inRangeN = open.filter((x) => x.inRange).length;
   const outUsd = sum(open.filter((x) => x.inRange === false), (x) => x.valueUsd);
   const feeOpen = sum(open, (x) => (x.feeUsd || 0) + (x.claimedUsd || 0));
@@ -428,8 +428,8 @@ export default function Overview() {
                 + ((now.leftoverUsd || 0) > 0.005 ? t(' · sisa token {v}', { v: usd(now.leftoverUsd) }) : '')
               : t('hanya posisi — saldo kas tidak terbaca')} />
           {now?.netPnl != null
-            // Modal wallet terlacak: yang utama PnL bersih terhadap modal nyata; PnL
-            // per-posisi (tanpa biaya zap/gas/swap) jadi keterangan.
+            // Wallet capital tracked: the main one is net PnL against the real capital; per-position
+            // PnL (without zap/gas/swap costs) becomes the note.
             ? <HeroFigure className="border-t border-border pt-4 sm:pt-5" label="PnL bersih" value={usd(now.netPnl)} fx={now.netPnl} valueClass={tone(now.netPnl)}
               aside={now.capitalNet > 0 ? <span className={`num text-sm font-semibold ${tone(now.netPnl)}`}>{pct((now.netPnl / now.capitalNet) * 100, 2)}</span> : null}
               sub={t('modal {m} · PnL posisi {v}', { m: usd(now.capitalNet), v: usd(now.pnl) })} />
@@ -500,8 +500,8 @@ export default function Overview() {
             empty={<Empty title="Tidak ada posisi aktif" sub="Posisi muncul di sini setelah bot menyalin LP dari wallet target." />}
             columns={[
               { key: 'pair', label: 'Pasangan', sort: (x) => `${x.symbol0}/${x.symbol1}`, render: (x) => <Pair p={x} link={false} /> },
-              // Versi ringkas kolom Sumber di halaman Posisi: cukup siapa yang disalin
-              // (rincian PnL target ada di sana), supaya panel ringkasan tetap padat.
+              // A compact version of the Source column on the Positions page: just who was copied
+              // (the target PnL breakdown is there), so the summary panel stays compact.
               { key: 'tgt', label: 'Sumber', sort: (x) => x.targetLabel || x.target || '', render: (x) => (
                 x.target ? (
                   <div className="max-w-40">
