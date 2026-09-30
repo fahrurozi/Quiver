@@ -538,13 +538,21 @@ class Positions {
     for (const r of rows) {
       const s = slotBy.get(r.pool_ref);
       const L = liqBy.get(r.id) ?? BigInt(r.liquidity || '0');
+      // Nol untuk posisi yang baru dimint (< 15 menit) padahal mint-nya mencatat
+      // likuiditas: biasanya node tertinggal yang belum mengenal mint-nya. `empty` tetap
+      // mengikuti chain — confirmEmpty yang memutuskan, dengan bukti receipt mint — tapi
+      // NILAINYA dari likuiditas tersimpan. Dulu tabel menampilkan $0 / PnL −100% sampai
+      // sinkron berikutnya jatuh ke node yang sehat.
+      const stored = BigInt(r.liquidity || '0');
+      const young = L === 0n && stored > 0n && Date.now() - (r.opened_ts || 0) < 15 * 60_000;
+      const Lval = young ? stored : L;
       const d0 = metaBy.get(r.token0)?.decimals ?? 18;
       const d1 = metaBy.get(r.token1)?.decimals ?? 18;
       const f = feeBy.get(r.id) || { fee0: 0n, fee1: 0n };
       let amount0 = 0n, amount1 = 0n, valueQuote = null, feeQuote = null, inRange = null;
-      if (s && L > 0n) {
+      if (s && Lval > 0n) {
         const a = m.getSqrtRatioAtTick(r.tick_lower), b = m.getSqrtRatioAtTick(r.tick_upper);
-        const amt = m.amountsForLiquidity(s.sqrtPriceX96, a, b, L);
+        const amt = m.amountsForLiquidity(s.sqrtPriceX96, a, b, Lval);
         amount0 = amt.amount0; amount1 = amt.amount1;
         inRange = m.sideOfRange(s.tick, r.tick_lower, r.tick_upper) === 'both';
       }
@@ -573,9 +581,9 @@ class Positions {
       // ekuitas anjlok sesaat. Pakai nilai terakhir yang diketahui dan tandai basi;
       // pemicu berbasis PnL tidak dinilai dari angka basi.
       const withdrawnUsd0 = toUsd(r.out_quote) ?? 0;
-      const valueStale = valueQuote == null && L > 0n;
+      const valueStale = valueQuote == null && Lval > 0n;
       const valUsd = valueQuote != null ? toUsd(valueQuote)
-        : L > 0n ? (prevLive.get(r.id)?.valueUsd ?? Math.max(0, costUsd - withdrawnUsd0)) : 0;
+        : Lval > 0n ? (prevLive.get(r.id)?.valueUsd ?? Math.max(0, costUsd - withdrawnUsd0)) : 0;
       const feeUsd = toUsd(feeQuote) ?? 0;
       const claimedUsd = toUsd(r.claimed_quote) ?? 0;
       // out_quote posisi terbuka = hasil tarik sebagian yang sudah di wallet
@@ -594,7 +602,7 @@ class Positions {
       }
 
       this.store.run('UPDATE positions SET liquidity=?, fees_quote=?, last_sync=? WHERE id=?',
-        L.toString(), feeQuote ?? 0, Date.now(), r.id);
+        Lval.toString(), feeQuote ?? 0, Date.now(), r.id);
 
       out.push({
         ...r, liquidity: L.toString(),

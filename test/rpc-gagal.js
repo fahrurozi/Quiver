@@ -86,6 +86,25 @@ function dunia(st) {
     assert.strictEqual(await d.positions.confirmEmpty(withTx), false);
   });
 
+  await t('posisi BARU dibaca nol: nilai TIDAK $0, likuiditas tersimpan tidak ditimpa nol', async () => {
+    const d = dunia({ liq: 0n, feeOk: true, openedTs: Date.now() - 60_000 });
+    const [p] = await d.positions.sync(2500);
+    // `empty` tetap ikut chain (confirmEmpty yang memutuskan), hanya nilainya yang tidak nol
+    assert.strictEqual(p.empty, true);
+    assert.ok(p.valueUsd > 0, String(p.valueUsd));
+    assert.strictEqual(d.store.get('SELECT liquidity FROM positions WHERE id=?', d.id).liquidity, '5000000');
+    // sinkron berikutnya ke node yang sehat: angka normal kembali
+    d.st.liq = 5000000n;
+    const [p2] = await d.positions.sync(2500);
+    assert.strictEqual(p2.empty, false);
+    assert.strictEqual(p2.valueUsd, p.valueUsd);
+    // posisi lama (> 15 menit) yang terbaca nol: nilainya memang nol
+    d.store.run('UPDATE positions SET opened_ts=? WHERE id=?', Date.now() - 3600_000, d.id);
+    d.st.liq = 0n;
+    const [p3] = await d.positions.sync(2500);
+    assert.strictEqual(p3.valueUsd, 0);
+  });
+
   await t('harga pool tidak terbaca: nilai TIDAK jadi $0 dan stop loss tidak terpicu', async () => {
     const d = dunia({ liq: 5000000n, feeOk: true });
     const [p1] = await d.positions.sync(2500);
