@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@heroui/react';
 import { useStatus } from '../App';
 import { usePoll, useResync } from '../hooks';
-import { PageHeader, Stat, Hero, HeroFigure, Panel, Empty, Loading, Notice, KV, Dot, DataTable, PriceRange, Segmented, Refresh, Fx, baseTokenOf } from '../components/ui';
+import { PageHeader, Stat, Hero, HeroFigure, Panel, Empty, Loading, Notice, KV, Dot, DataTable, PriceRange, Segmented, Refresh, Fx, WalletLinks, baseTokenOf } from '../components/ui';
 import PnlCalendar from '../components/PnlCalendar';
 import GrowthChart from '../components/GrowthChart';
 import ShareButton, { ShareDialog, totalCard, dailyCard } from '../components/ShareCard';
@@ -504,10 +504,13 @@ export default function Overview() {
               // (rincian PnL target ada di sana), supaya panel ringkasan tetap padat.
               { key: 'tgt', label: 'Sumber', sort: (x) => x.targetLabel || x.target || '', render: (x) => (
                 x.target ? (
-                  <a href={'#targets/' + x.target} className="group block max-w-40" title={x.target}>
-                    {x.targetLabel && <div className="truncate font-medium group-hover:underline">{x.targetLabel}</div>}
-                    <div className="mono text-xs whitespace-nowrap text-muted group-hover:text-foreground">{short(x.target)}</div>
-                  </a>
+                  <div className="max-w-40">
+                    <a href={'#targets/' + x.target} className="group block" title={x.target}>
+                      {x.targetLabel && <div className="truncate font-medium group-hover:underline">{x.targetLabel}</div>}
+                      <div className="mono text-xs whitespace-nowrap text-muted group-hover:text-foreground">{short(x.target)}</div>
+                    </a>
+                    <WalletLinks address={x.target} compact className="mt-0.5" />
+                  </div>
                 ) : <span className="text-xs text-muted">{t('Manual / di luar bot')}</span>) },
               { key: 'range', label: 'Rentang harga', sortable: false, render: (x) => (
                 <PriceRange position={x} lo={x.tick_lower} hi={x.tick_upper} cur={x.curTick}

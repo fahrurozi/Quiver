@@ -45,12 +45,15 @@ function CopiedFrom({ p }) {
     );
   }
   return (
-    <a href={'#targets/' + p.target} className="group block max-w-40" title={p.target}>
-      {p.targetLabel && <div className="truncate font-medium group-hover:underline">{p.targetLabel}</div>}
-      <div className="mono text-xs whitespace-nowrap text-muted group-hover:text-foreground">
-        {short(p.target)}{p.mirror_of ? ` · #${p.mirror_of}` : ''}
-      </div>
-    </a>
+    <div className="max-w-40">
+      <a href={'#targets/' + p.target} className="group block" title={p.target}>
+        {p.targetLabel && <div className="truncate font-medium group-hover:underline">{p.targetLabel}</div>}
+        <div className="mono text-xs whitespace-nowrap text-muted group-hover:text-foreground">
+          {short(p.target)}{p.mirror_of ? ` · #${p.mirror_of}` : ''}
+        </div>
+      </a>
+      <WalletLinks address={p.target} compact className="mt-0.5" />
+    </div>
   );
 }
 

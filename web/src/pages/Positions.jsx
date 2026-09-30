@@ -4,7 +4,7 @@ import { Coins, DoorOpen } from 'lucide-react';
 import { usePoll, useResync } from '../hooks';
 import { useClosePosition } from '../useClosePosition';
 import { useClaimFees } from '../useClaimFees';
-import { PageHeader, Panel, DataTable, Empty, Loading, Notice, PriceRange, Dot, Refresh, Segmented, TradeLinks, baseTokenOf } from '../components/ui';
+import { PageHeader, Panel, DataTable, Empty, Loading, Notice, PriceRange, Dot, Refresh, Segmented, TradeLinks, WalletLinks, baseTokenOf } from '../components/ui';
 import { TokenPair, PairName } from '../components/TokenIcon';
 import { GmgnDot, GmgnProvider } from '../components/GmgnDot';
 // Halaman detail membawa pustaka grafik — dimuat hanya saat dibuka.
@@ -122,6 +122,8 @@ function Source({ p }) {
           {short(p.target)}{p.mirror_of ? ` · #${p.mirror_of}` : ''}
         </div>
       </a>
+      {/* wallet target di luar dasbor: DeBank, LPAgent, Etherscan */}
+      <WalletLinks address={p.target} compact className="mt-0.5" />
       {p.takeover_ts != null && p.status !== 'closed' && (
         <div className="mt-1 inline-flex rounded bg-warning/15 px-1.5 py-0.5 text-[0.6875rem] font-medium text-warning"
           title={t('Diambil alih {w} — bot tidak mengikuti target dan tidak menutup otomatis.', { w: ago(p.takeover_ts) })}>

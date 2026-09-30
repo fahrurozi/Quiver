@@ -17,7 +17,7 @@
 // jadi yang disandingkan persen terhadap modal masing-masing.
 import { Chip } from '@heroui/react';
 import { Crosshair } from 'lucide-react';
-import { Fig } from './ui';
+import { Fig, WalletLinks } from './ui';
 import { usd, pct, tone, age, ago, short } from '../fmt';
 import { useI18n } from '../i18n';
 
@@ -62,9 +62,12 @@ export default function TargetSide({ p, className = 'mb-4' }) {
             </span>
           )}
         </span>
-        <a href={'#targets/' + p.target} className="min-w-0 text-xs text-accent hover:underline" title={p.target}>
-          {label || short(p.target)}{nft ? ` · #${nft}` : ''}
-        </a>
+        <span className="flex min-w-0 items-center gap-2">
+          <a href={'#targets/' + p.target} className="min-w-0 text-xs text-accent hover:underline" title={p.target}>
+            {label || short(p.target)}{nft ? ` · #${nft}` : ''}
+          </a>
+          <WalletLinks address={p.target} compact />
+        </span>
       </div>
       {angka === 0 ? (!w && (
         <div className="text-xs text-muted">

@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { Button, Chip, Drawer } from '@heroui/react';
 import { X, ChartCandlestick, PlusCircle } from 'lucide-react';
 import { get } from '../api';
-import { Stat, Empty, Fig, Loading, Notice, PriceRange, TxHash, TradeLinks, baseTokenOf } from './ui';
+import { Stat, Empty, Fig, Loading, Notice, PriceRange, TxHash, TradeLinks, WalletLinks, baseTokenOf } from './ui';
 import TokenIcon, { TokenPair } from './TokenIcon';
 import { usd, pct, tone, age, ago, num, short, qty, fmtQty, price, sqrtPrice, tickPrice, locale as fmtLocale } from '../fmt';
 import { useI18n, reason } from '../i18n';
@@ -312,6 +312,7 @@ export default function WalletPositionHistory({ p, address, onClose }) {
                       <span className="uppercase">{String(p.venue || 'v4')}</span><span>·</span>
                       <span className="mono">#{p.token_id}</span><span>·</span>
                       <a href={'#wallet/' + address} className="mono hover:underline">{short(address)}</a>
+                      <WalletLinks address={address} compact />
                     </div>
                     <TradeLinks token={baseTokenOf(p)} pool={p.pool_ref} className="mt-1.5 flex-wrap" />
                   </div>
