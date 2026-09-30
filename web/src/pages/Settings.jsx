@@ -1,7 +1,7 @@
 import { chainInfo } from '../chain';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Chip, Checkbox, Separator, Tabs, toast } from '@heroui/react';
-import { Pencil, Activity as Pulse, Trash2, KeyRound, Unlock, ChevronUp, ChevronDown, Copy, Wallet, Network, Fuel, Bell, MessageCircle, Settings2, ShieldCheck, ShieldAlert, ChartCandlestick, Coins, RefreshCw } from 'lucide-react';
+import { Pencil, Activity as Pulse, Trash2, KeyRound, Unlock, ChevronUp, ChevronDown, Copy, Wallet, Network, Fuel, Bell, MessageCircle, Settings2, ShieldCheck, ShieldAlert, ChartCandlestick, Coins, RefreshCw, DatabaseBackup, Download, ArchiveRestore } from 'lucide-react';
 import { Wallet as EthersWallet } from 'ethers';
 import SettingInfo from '../components/SettingInfo';
 import { get, post } from '../api';
@@ -10,7 +10,7 @@ import { PageHeader, Loading, Notice, Text, Pick, Toggle, ask } from '../compone
 import { num, usd, plainUsd, locale as fmtLocale, ago } from '../fmt';
 import { fxFormat } from '../currency';
 import { usePrivacy } from '../privacy';
-import { useI18n, translate as tt } from '../i18n';
+import { useI18n, translate as tt, reason } from '../i18n';
 
 const amt = (v, d = 4) => (v == null ? '—' : Number(v).toLocaleString(fmtLocale(), { maximumFractionDigits: d }));
 
@@ -25,6 +25,7 @@ const SETTINGS_NAV = [
   ['loop', 'Mesin', 'Pemindaian dan harga ETH', Settings2],
   ['display', 'Tampilan', 'Sensor nilai dan mata uang kedua', Coins],
   ['security', 'Keamanan', 'Akses masuk dasbor', ShieldCheck],
+  ['backup', 'Cadangan', 'Unduh & pulihkan pengaturan, data, wallet', DatabaseBackup],
 ];
 
 function Section({ title, desc, children }) {
@@ -730,6 +731,170 @@ function SecurityTab({ d }) {
   );
 }
 
+// ---------------- cadangan & pemulihan ----------------
+const BACKUP_PARTS = [
+  ['config', 'Pengaturan', 'config.json: aturan, target, RPC, gas, notifikasi, Telegram. Rahasia yang diatur lewat .env tidak ikut.'],
+  ['db', 'Basis data', 'Riwayat posisi, transaksi, ekuitas, riset wallet target. Cache RPC tidak ikut (terisi lagi sendiri).'],
+  ['wallet', 'Wallet', 'Kunci wallet bot sebagai keystore terenkripsi password — kunci privat mentah tidak pernah masuk berkas.'],
+];
+
+function PartBox({ label, desc, selected, onChange, isDisabled, note }) {
+  const { t } = useI18n();
+  return (
+    <Checkbox isSelected={selected} onChange={onChange} isDisabled={isDisabled} aria-label={t(label)}>
+      <Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
+        <span className="flex min-w-0 flex-col"><span className="font-medium">{t(label)}{note && <span className="ml-2 break-all text-xs font-normal text-muted">{note}</span>}</span>
+          <span className="text-xs text-muted">{t(desc)}</span></span>
+      </Checkbox.Content>
+    </Checkbox>
+  );
+}
+
+const fileStamp = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+};
+const mb = (n) => (n < 1e6 ? `${Math.max(1, Math.round(n / 1e3)).toLocaleString(fmtLocale())} KB`
+  : `${(n / 1e6).toLocaleString(fmtLocale(), { maximumFractionDigits: 1 })} MB`);
+
+function BackupTab({ d }) {
+  const { t } = useI18n();
+  const hasWallet = !!d.wallet?.address;
+  // ---- buat cadangan ----
+  const [pick, setPick] = useState({ config: true, db: true, wallet: false });
+  const [tok, setTok] = useState('');
+  const [pass, setPass] = useState('');
+  const [pass2, setPass2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const any = pick.config || pick.db || pick.wallet;
+  const passOk = !pick.wallet || (pass.length >= 8 && pass === pass2);
+  const download = async () => {
+    setBusy(true);
+    const r = await post('/api/settings/backup', { token: tok, parts: pick, password: pick.wallet ? pass : undefined });
+    setBusy(false);
+    if (r.error) { toast.danger(reason(r.error)); return; }
+    setTok(''); setPass(''); setPass2('');
+    const blob = new Blob([JSON.stringify(r.backup)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `quiver-backup-${r.backup.instance || 'quiver'}-${fileStamp()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(tt('Cadangan terunduh ({s}) — simpan di tempat aman: isinya bisa berisi API key dan riwayat lengkap bot.', { s: mb(blob.size) }));
+  };
+
+  // ---- pulihkan ----
+  const [file, setFile] = useState(null);        // { name, size, backup }
+  const [fileErr, setFileErr] = useState('');
+  const [rpick, setRpick] = useState({});
+  const [rtok, setRtok] = useState('');
+  const [rpass, setRpass] = useState('');
+  const [rbusy, setRbusy] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const readFile = async (f) => {
+    setFile(null); setFileErr(''); setRpick({});
+    if (!f) return;
+    try {
+      const b = JSON.parse(await f.text());
+      if (b?.format !== 'quiver-backup' || !b.parts) throw new Error(tt('Bukan berkas cadangan Quiver.'));
+      setFile({ name: f.name, size: f.size, backup: b });
+      setRpick(Object.fromEntries(Object.keys(b.parts).map((k) => [k, true])));
+    } catch (e) { setFileErr(e instanceof SyntaxError ? tt('Berkas cadangan bukan JSON yang valid.') : e.message); }
+  };
+  const b = file?.backup;
+  const rany = rpick.config || rpick.db || rpick.wallet;
+  const liveOn = !d.mode?.dry_run;
+  const restore = async () => {
+    const what = BACKUP_PARTS.filter(([k]) => rpick[k]).map(([, l]) => tt(l)).join(', ');
+    const body = rpick.db
+      ? tt('Riwayat bot di server ini diganti isi cadangan. Posisi yang dibuka SESUDAH cadangan dibuat tidak akan dikenal bot. Berkas lama tidak dihapus — disimpan di sebelahnya sebagai *.pre-restore-*.')
+      : rpick.config ? tt('Pengaturan diganti isi cadangan (port, token dasbor, dan lokasi data tetap milik server ini). Bot mulai lagi dalam mode simulasi.') : null;
+    if (!(await ask({ title: tt('Pulihkan {w} dari cadangan?', { w: what }), body, confirm: tt('Pulihkan'), danger: true }))) return;
+    setRbusy(true);
+    const r = await post('/api/settings/restore', { token: rtok, parts: rpick, password: rpick.wallet ? rpass : undefined, backup: b });
+    setRbusy(false);
+    if (r.error) { toast.danger(reason(r.error)); return; }
+    setRtok(''); setRpass('');
+    if (r.wallet && !r.wallet.unchanged) toast.success(tt('Wallet {a} terpasang', { a: r.wallet.address }));
+    if (!r.restarting) { toast.success(tt('Cadangan dipulihkan')); return; }
+    // Bot berhenti tertib lalu dinyalakan lagi oleh pm2; berkasnya ditukar saat boot.
+    setRestarting(true);
+    const t0 = Date.now();
+    await new Promise((res) => setTimeout(res, 5000));
+    while (Date.now() - t0 < 4 * 60_000) {
+      try { const x = await get('/api/settings'); if (x && !x.error) { location.reload(); return; } } catch { /* masih mati */ }
+      await new Promise((res) => setTimeout(res, 2500));
+    }
+    setRestarting(false);
+    toast.danger(tt('Bot belum menyala lagi setelah 4 menit — periksa pm2/log di server.'));
+  };
+
+  return (
+    <Section title="Cadangan" desc="Unduh salinan pengaturan, basis data, dan wallet bot ke satu berkas, lalu pulihkan di instance ini atau instance lain. Kedua arah butuh token dashboard yang diketik ulang.">
+      <div className="flex flex-col gap-4 rounded-md border border-border p-4">
+        <div className="font-medium">{t('Buat cadangan')}</div>
+        <div className="flex flex-col gap-3">
+          {BACKUP_PARTS.map(([k, label, desc]) => (
+            <PartBox key={k} label={label} desc={desc} selected={!!pick[k]} onChange={(v) => setPick((p) => ({ ...p, [k]: v }))}
+              isDisabled={k === 'wallet' && !hasWallet} note={k === 'wallet' && !hasWallet ? t('belum ada wallet') : null} />
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Text label="Token dashboard" type="password" mono placeholder="token" value={tok} onChange={setTok} autoComplete="off" />
+          {pick.wallet && <>
+            <Text label="Password keystore baru" type="password" placeholder="min. 8 karakter" value={pass} onChange={setPass} autoComplete="off" />
+            <Text label="Ulangi password" type="password" placeholder="min. 8 karakter" value={pass2} onChange={setPass2} autoComplete="off"
+              isInvalid={!!pass2 && pass !== pass2} />
+          </>}
+        </div>
+        <Button variant="outline" className="w-fit" isDisabled={!any || !tok || !passOk} isPending={busy} onPress={download}>
+          <Download className="size-4" />{t('Unduh cadangan')}</Button>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-md border border-border p-4">
+        <div className="font-medium">{t('Pulihkan dari cadangan')}</div>
+        {liveOn && <Notice status="warning">{t('Matikan mode LIVE dulu (tab Wallet & mode) sebelum memulihkan cadangan.')}</Notice>}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted">{t('Berkas cadangan (.json)')}</label>
+          <input type="file" accept=".json,application/json" disabled={rbusy || restarting}
+            className="text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-transparent file:px-3 file:py-1.5 file:text-sm"
+            onChange={(e) => readFile(e.target.files?.[0] || null)} />
+        </div>
+        {fileErr && <Notice status="danger">{fileErr}</Notice>}
+        {b && (
+          <>
+            <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
+              <div><dt className="text-xs text-muted">{t('Dibuat')}</dt><dd className="mt-0.5">{new Date(b.createdAt).toLocaleString(fmtLocale())} <span className="text-muted">({ago(Date.parse(b.createdAt))})</span></dd></div>
+              <div><dt className="text-xs text-muted">{t('Instance')}</dt><dd className="mono mt-0.5">{b.instance || '—'}{b.chains?.length ? ` · ${b.chains.join(', ')}` : ''}</dd></div>
+              <div><dt className="text-xs text-muted">{t('Ukuran berkas')}</dt><dd className="num mt-0.5">{mb(file.size)}</dd></div>
+            </dl>
+            <div className="flex flex-col gap-3">
+              {BACKUP_PARTS.filter(([k]) => b.parts[k]).map(([k, label]) => {
+                const note = k === 'db' ? tt('{n} posisi ({o} terbuka) · {s}', { n: b.parts.db.stats?.positions ?? '?', o: b.parts.db.stats?.open ?? '?', s: mb(b.parts.db.bytes || 0) })
+                  : k === 'wallet' ? `${b.parts.wallet.address}${b.parts.wallet.address === d.wallet?.address ? ` · ${tt('sama dengan wallet sekarang')}` : ''}`
+                  : k === 'config' ? tt('{n} chain', { n: Object.keys(b.parts.config.json?.chains || {}).length || 1 }) : null;
+                const desc = k === 'db' ? 'Menggantikan seluruh riwayat bot di server ini. Bot dinyalakan ulang.'
+                  : k === 'config' ? 'Port, token dasbor, dan lokasi data tetap milik server ini. Bot dinyalakan ulang dalam mode simulasi.'
+                  : 'Kunci wallet sekarang (kalau ada) dipindah ke berkas cadangan bertanggal, tidak dihapus.';
+                return <PartBox key={k} label={label} desc={desc} note={note} selected={!!rpick[k]} onChange={(v) => setRpick((p) => ({ ...p, [k]: v }))} />;
+              })}
+            </div>
+            {rpick.wallet && d.wallet?.fromEnv && <EnvNotice name={d.wallet.fromEnv} what="Kunci wallet" />}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Text label="Token dashboard" type="password" mono placeholder="token" value={rtok} onChange={setRtok} autoComplete="off" />
+              {rpick.wallet && <Text label="Password keystore" type="password" placeholder="password saat mencadangkan" value={rpass} onChange={setRpass} autoComplete="off" />}
+            </div>
+            {restarting ? <Notice status="warning" title="Bot sedang dinyalakan ulang…">{t('Halaman ini dimuat ulang otomatis begitu bot menyala lagi.')}</Notice> : (
+              <Button variant="danger" className="w-fit" isDisabled={!rany || !rtok || liveOn || (rpick.wallet && !rpass)} isPending={rbusy} onPress={restore}>
+                <ArchiveRestore className="size-4" />{t('Pulihkan')}</Button>
+            )}
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 export default function Settings() {
   const { t } = useI18n();
   const [d, setD] = useState(null);
@@ -795,6 +960,7 @@ export default function Settings() {
                 </Tabs.Panel>
                 <Tabs.Panel id="display"><DisplayTab d={d} reload={load} /></Tabs.Panel>
                 <Tabs.Panel id="security"><SecurityTab d={d} /></Tabs.Panel>
+                <Tabs.Panel id="backup"><BackupTab d={d} /></Tabs.Panel>
               </div>
             </Tabs>
           </Card.Content>

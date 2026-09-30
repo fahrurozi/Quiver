@@ -12,6 +12,7 @@ const { Telegram } = require('./telegram');
 const { loadDotEnv, applyEnv, defaultEnvPath, writeCfg } = require('./env');
 const { normalizeCfg, chainView, enabledChains, PRIMARY } = require('./multichain');
 const { setupNeeded, runSetup } = require('./setup');
+const { applyPendingRestore } = require('./backup');
 const { NETWORKS } = require('./networks');
 
 const ROOT = path.join(__dirname, '..');
@@ -25,6 +26,14 @@ function loadCfg() {
   const cfg = JSON.parse(fs.readFileSync(CFG_PATH, 'utf8'));
   cfg.db = cfg.db || {}; cfg.db.path = path.isAbsolute(cfg.db.path || '') ? cfg.db.path : path.join(ROOT, cfg.db.path || 'data/lpcopy.db');
   return cfg;
+}
+// Kunci satu instance: pid proses Quiver lain yang masih hidup, atau 0.
+const PID_FILE = path.join(ROOT, 'data', 'lpcopy.pid');
+function otherInstanceAlive() {
+  if (!fs.existsSync(PID_FILE)) return 0;
+  const pid = Number(fs.readFileSync(PID_FILE, 'utf8').trim());
+  if (!pid || pid === process.pid) return 0;
+  try { process.kill(pid, 0); return pid; } catch { return 0; }
 }
 const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 // Label singkat chain di depan baris log, supaya log dua mesin di satu proses terbaca.
@@ -40,6 +49,13 @@ async function main() {
     const diminta = process.argv[2] === 'setup' || process.env.LPCOPY_SETUP === '1';
     await runSetup({ root: ROOT, cfgPath: CFG_PATH, envPath: defaultEnvPath(ROOT), diminta, log: console.log });
     try { DOTENV = loadDotEnv(defaultEnvPath(ROOT)); } catch (e) { console.error(`.env: ${e.message}`); process.exit(1); }
+  }
+  // Pemulihan dari cadangan (Pengaturan → Cadangan): config & basis data ditukar di sini,
+  // sebelum ada yang membukanya. Hanya oleh proses bot itu sendiri, bukan perintah CLI
+  // (`lp scout` dsb.) yang bisa jalan berdampingan dengan bot yang sedang hidup.
+  if ((process.argv[2] || 'run') === 'run' && !otherInstanceAlive()) {
+    applyPendingRestore(CFG_PATH, console.log);
+    applyPendingRestore(loadCfg().db.path, console.log);
   }
   const cfg = loadCfg();
   // Bentuk multi-chain (chains.<nama>.*). Config lama dinormalkan di memori; ditulis
@@ -157,15 +173,10 @@ async function main() {
 
   // ---- mode jalan --------------------------------------------------------
   // Kunci satu instance: dua proses berbagi DB yang sama akan saling menimpa kursor.
-  const pidFile = path.join(ROOT, 'data', 'lpcopy.pid');
-  if (fs.existsSync(pidFile)) {
-    const old = Number(fs.readFileSync(pidFile, 'utf8').trim());
-    let alive = false;
-    try { process.kill(old, 0); alive = true; } catch { alive = false; }
-    if (alive) { console.error(`Quiver sudah jalan (pid ${old}). Hentikan dulu: kill ${old}`); process.exit(1); }
-  }
-  fs.writeFileSync(pidFile, String(process.pid));
-  const cleanup = () => { try { fs.unlinkSync(pidFile); } catch { /* sudah hilang */ } };
+  const old = otherInstanceAlive();
+  if (old) { console.error(`Quiver sudah jalan (pid ${old}). Hentikan dulu: kill ${old}`); process.exit(1); }
+  fs.writeFileSync(PID_FILE, String(process.pid));
+  const cleanup = () => { try { fs.unlinkSync(PID_FILE); } catch { /* sudah hilang */ } };
   process.on('exit', cleanup);
 
   for (const net of Object.values(nets)) {

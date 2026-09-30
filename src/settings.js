@@ -23,6 +23,7 @@ const { RpcPool } = require('./rpc');
 const { TOPIC } = require('./chain');
 const { writeCfg, envName, privateKeyFromEnv } = require('./env');
 const { CURRENCIES, currencyOf } = require('./fx');
+const { createBackup, parseBackup, stageRestore } = require('./backup');
 
 const MASK = '••••';
 
@@ -116,7 +117,10 @@ async function probeRpc({ url, headers }, chain) {
 
 // `engines`: semua mesin di proses ini (wallet yang sama dipakai semua chain — ganti
 // kunci harus me-reset dompet tiap mesin). `chain` = profil chain tampilan ini.
-function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath, rpc, chain, log, readBody, telegram, sessionCookie, market = null, fx = null }) {
+// `restart`: dipanggil sesudah pemulihan config/basis data. Bawaannya jalur berhenti
+// tertib index.js (SIGINT) — pm2/systemd menyalakannya lagi dan boot menukar berkasnya.
+function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath, rpc, chain, log, readBody, telegram, sessionCookie, market = null, fx = null,
+  restart = () => process.kill(process.pid, 'SIGINT') }) {
   chain = ensureChain(chain || engine?.chain);
   // Lewat writeCfg: nilai dari .env tidak boleh ikut tertulis ke config.json.
   const saveCfg = () => writeCfg(cfgPath, cfg);
@@ -156,6 +160,26 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     if ((engine.activeEntries || 0) > 0 || engine.exiting?.size > 0 || engine.selling?.size > 0 || engine.compound?.running) return { error: 'Bot sedang memproses transaksi (masuk/keluar/jual sisa) — tunggu sampai selesai, lalu coba lagi.' };
     return !engine.dryRun() ? { error: 'Matikan mode LIVE dulu sebelum mengganti wallet.' } : null;
   };
+
+  // Token dashboard yang DIKETIK ULANG, bukan cookie sesi: cookie HttpOnly tidak bisa
+  // dibaca lewat XSS, jadi ini lapis kedua yang nyata untuk aksi yang membawa rahasia keluar.
+  const retypedToken = (b, noToken) => {
+    const TOKEN = cfg.server?.auth_token || null;
+    if (!TOKEN) return { error: noToken };
+    const supplied = Buffer.from(String(b.token || ''));
+    const real = Buffer.from(TOKEN);
+    if (supplied.length !== real.length || !crypto.timingSafeEqual(supplied, real)) return { error: 'Token salah.' };
+    return null;
+  };
+  // Berkas cadangan berisi basis data (bisa beberapa MB) — melewati batas 1 MB readBody.
+  const readBackupBody = (req) => (req.__body ? Promise.resolve(req.__body) : new Promise((resolve, reject) => {
+    const chunks = []; let n = 0;
+    req.on('data', (c) => { n += c.length; if (n > 256 * 1024 * 1024) { req.destroy(); reject(new Error('Berkas cadangan terlalu besar.')); } else chunks.push(c); });
+    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { reject(new Error('Berkas cadangan bukan JSON yang valid.')); } });
+    req.on('error', reject);
+  }));
+  const busyNow = () => (engines.some((e) => (e.activeEntries || 0) > 0 || e.exiting?.size > 0 || e.selling?.size > 0 || e.compound?.running)
+    ? { error: 'Bot sedang memproses transaksi (masuk/keluar/jual sisa) — tunggu sampai selesai, lalu coba lagi.' } : null);
 
   const rpcView = () => {
     // Urutan rpc.eps selalu sama dengan cfg.chain.endpoints (dibuat dari daftar yang
@@ -318,11 +342,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
     // dibaca lewat XSS, jadi ini lapis kedua yang nyata, bukan formalitas.
     'POST /api/settings/wallet/export': async (req) => {
       const b = await readBody(req);
-      const TOKEN = cfg.server?.auth_token || null;
-      if (!TOKEN) return { error: 'Setel token dashboard dulu di tab Keamanan sebelum bisa mengekspor wallet.' };
-      const supplied = Buffer.from(String(b.token || ''));
-      const real = Buffer.from(TOKEN);
-      if (supplied.length !== real.length || !crypto.timingSafeEqual(supplied, real)) return { error: 'Token salah.' };
+      const bad = retypedToken(b, 'Setel token dashboard dulu di tab Keamanan sebelum bisa mengekspor wallet.'); if (bad) return bad;
       const addr = exec.address();
       if (!addr) return { error: 'Tidak ada wallet terpasang.' };
       const pass = String(b.password || '');
@@ -332,6 +352,68 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       const keystore = await w.encrypt(pass);
       log(`wallet ${addr} diekspor sebagai keystore terenkripsi`);
       return { ok: true, address: addr, keystore: JSON.parse(keystore) };
+    },
+
+    // ---- cadangan & pemulihan (lihat backup.js) ----
+    'POST /api/settings/backup': async (req) => {
+      const b = await readBody(req);
+      const bad = retypedToken(b, 'Setel token dashboard dulu di tab Keamanan sebelum bisa membuat cadangan.'); if (bad) return bad;
+      const parts = { config: !!b.parts?.config, db: !!b.parts?.db, wallet: !!b.parts?.wallet };
+      if (!parts.config && !parts.db && !parts.wallet) return { error: 'Pilih minimal satu bagian untuk dicadangkan.' };
+      let wallet = null;
+      if (parts.wallet) {
+        if (!exec.address()) return { error: 'Tidak ada wallet terpasang.' };
+        if (String(b.password || '').length < 8) return { error: 'Password keystore minimal 8 karakter.' };
+        try { wallet = exec.loadWallet(); } catch (e) { return { error: e.message }; }
+      }
+      const dbPath = cfg.db?.path;
+      if (parts.db && !dbPath) return { error: 'Lokasi basis data tidak diketahui.' };
+      try {
+        const backup = await createBackup({
+          parts, cfgPath, db: store.db, dbPath, wallet, password: String(b.password || ''),
+          meta: {
+            instance: path.basename(path.dirname(path.resolve(cfgPath))),
+            chains: engines.map((e) => e.chain?.network).filter(Boolean),
+            address: exec.address(),
+          },
+        });
+        log(`cadangan dibuat: ${Object.keys(backup.parts).join(', ')}${backup.parts.db ? ` (basis data ${(backup.parts.db.bytes / 1e6).toFixed(1)} MB)` : ''}`);
+        return { ok: true, backup };
+      } catch (e) { return { error: `Gagal membuat cadangan: ${e.message}` }; }
+    },
+    // Pemulihan: wallet langsung dipasang; config & basis data ditaruh sebagai berkas
+    // tertunda lalu bot dinyalakan ulang (lewat jalur berhenti tertib) supaya ditukar saat
+    // boot. Wajib mode simulasi — basis data lama tidak tahu posisi yang dibuka sesudahnya.
+    'POST /api/settings/restore': async (req) => {
+      let b;
+      try { b = await readBackupBody(req); } catch (e) { return { error: e.message }; }
+      const bad = retypedToken(b, 'Setel token dashboard dulu di tab Keamanan sebelum bisa memulihkan cadangan.'); if (bad) return bad;
+      let backup;
+      try { backup = parseBackup(b.backup); } catch (e) { return { error: e.message }; }
+      const parts = { config: !!b.parts?.config, db: !!b.parts?.db, wallet: !!b.parts?.wallet };
+      for (const k of Object.keys(parts)) if (parts[k] && !backup.parts[k]) return { error: `Berkas cadangan tidak berisi bagian ${k}.` };
+      if (!parts.config && !parts.db && !parts.wallet) return { error: 'Pilih minimal satu bagian untuk dipulihkan.' };
+      if (engines.some((e) => !e.dryRun())) return { error: 'Matikan mode LIVE dulu sebelum memulihkan cadangan.' };
+      const busy = busyNow(); if (busy) return busy;
+      const dbPath = cfg.db?.path;
+      if (parts.db && !dbPath) return { error: 'Lokasi basis data tidak diketahui.' };
+
+      // Wallet dulu: satu-satunya bagian yang bisa gagal karena masukan (password salah),
+      // dan kegagalannya tidak boleh meninggalkan config/db tertunda yang setengah jadi.
+      let walletRes = null;
+      if (parts.wallet) {
+        const live = refuseIfLive(); if (live) return live;
+        let w;
+        try { w = await ethers.Wallet.fromEncryptedJson(JSON.stringify(backup.parts.wallet.keystore), String(b.password || '')); }
+        catch { return { error: 'Password keystore salah, atau keystore di berkas cadangan rusak.' }; }
+        walletRes = w.address.toLowerCase() === exec.address() ? { address: exec.address(), unchanged: true } : writeKey(w.privateKey);
+      }
+      let staged = [];
+      try { staged = await stageRestore({ backup, parts, cfgPath, dbPath }); }
+      catch (e) { return { error: e.message, wallet: walletRes }; }
+      log(`pemulihan dari cadangan ${backup.createdAt}: ${[...(walletRes ? ['wallet'] : []), ...staged].join(', ')}${staged.length ? ' — bot dinyalakan ulang' : ''}`);
+      if (staged.length) setTimeout(restart, 1500).unref?.();
+      return { ok: true, wallet: walletRes, staged, restarting: staged.length > 0 };
     },
 
     // ---- mode ----
