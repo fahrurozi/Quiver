@@ -28,6 +28,15 @@ const FIELDS = [
   ['LPCOPY_NTFY_TOPIC', ['notify', 'ntfy_topic']],
   ['LPCOPY_GMGN_API_KEY', ['gmgn', 'api_key']],
   ['LPCOPY_DASHBOARD_URL', ['server', 'public_url']],
+  // Swap aggregator keys (swaprouter.js; Settings → Aggregators shows them as "from .env").
+  ['OKX_API_KEY', ['aggregators', 'okx', 'api_key']],
+  ['OKX_SECRET_KEY', ['aggregators', 'okx', 'secret_key']],
+  ['OKX_API_PASSPHRASE', ['aggregators', 'okx', 'passphrase']],
+  ['OKX_PROJECT_ID', ['aggregators', 'okx', 'project_id']],
+  ['LIFI_API_KEY', ['aggregators', 'lifi', 'api_key']],
+  ['ZEROX_API_KEY', ['aggregators', 'zerox', 'api_key']],
+  ['ONEINCH_API_KEY', ['aggregators', 'oneinch', 'api_key']],
+  ['OPENOCEAN_API_KEY', ['aggregators', 'openocean', 'api_key']],
 ];
 // One VPS hosts several instances (~/lpcopy, ~/lpcopy2, ~/lpcopy3) that share
 // one .env file, and each instance's dashboard address differs. The fields in this list may

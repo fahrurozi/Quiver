@@ -122,7 +122,7 @@ function swapHistory({ store, chain, ethUsd = 0, limit = 40, kinds = KINDS }) {
     // Route: Kyber (aggregator) or a direct pool. `via` holds the poolRef for a direct
     // pool and 'kyber' for Kyber; manual swaps/gas top-ups are always Kyber.
     const direct = (d.via && d.via !== 'kyber') || (r.kind === 'bridge_swap' && d.pool && !d.dex) || /^pool /.test(d.dex || '');
-    const route = !swap || r.kind === 'wrap_eth' || r.kind === 'unwrap_weth' ? null : direct ? 'pool' : 'kyber';
+    const route = !swap || r.kind === 'wrap_eth' || r.kind === 'unwrap_weth' ? null : direct ? 'pool' : d.aggregator || 'kyber';
 
     const gasUsd = r.gas_used && r.gas_price && ethUsd
       ? (Number(r.gas_used) * Number(BigInt(r.gas_price))) / 1e18 * ethUsd : null;
@@ -136,7 +136,7 @@ function swapHistory({ store, chain, ethUsd = 0, limit = 40, kinds = KINDS }) {
         amountIn: d.amountIn ?? human(inRaw, tokenIn),
         amountOut: d.amountOut ?? human(outRaw, tokenOut),
         usdIn: d.usdIn ?? null, usdOut: d.usdOut ?? null,
-        dex: route === 'pool' ? null : d.dex || null,
+        dex: route === 'pool' ? null : route !== 'kyber' ? String(d.dex || '').replace(/^[^:]+: /, '') || null : d.dex || null,
       } : { usdIn: d.valueUsd ?? claim?.usd ?? null },
     };
   });

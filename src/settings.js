@@ -181,6 +181,36 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
   const busyNow = () => (engines.some((e) => (e.activeEntries || 0) > 0 || e.exiting?.size > 0 || e.selling?.size > 0 || e.compound?.running)
     ? { error: 'Bot sedang memproses transaksi (masuk/keluar/jual sisa) — tunggu sampai selesai, lalu coba lagi.' } : null);
 
+  // ---- swap aggregators (swaprouter.js) ----
+  // Secrets never go back to the browser whole: only whether they are set, a masked prefix,
+  // and which .env variable supplies them (those cannot be edited here).
+  const AGG_FIELDS = { kyber: [], okx: ['api_key', 'secret_key', 'passphrase', 'project_id'], lifi: ['api_key'], zerox: ['api_key'], oneinch: ['api_key'], openocean: ['api_key'] };
+  const router = () => engine.kyber;
+  const aggView = () => {
+    const r = router();
+    if (!r?.byId) return null;
+    return {
+      mode: r.mode(), order: r.order(),
+      items: r.order().map((id) => {
+        const a = r.byId.get(id);
+        const st = cfg.aggregators?.[id] || {};
+        return {
+          id, label: a.label, enabled: st.enabled !== false, needsKey: !!a.needsKey, keyOptional: id === 'lifi',
+          supported: a.supportsChain(), active: a.enabled(), blocker: a.blocker(),
+          fields: (AGG_FIELDS[id] || []).map((f) => ({
+            name: f, set: !!st[f], masked: st[f] ? `${String(st[f]).slice(0, 4)}${MASK}` : '',
+            fromEnv: envName(cfg, `aggregators.${id}.${f}`),
+          })),
+        };
+      }),
+    };
+  };
+  // Quote caches and rate-limit cooldowns belong to the old settings: drop them in every
+  // chain's router so a new key or switch takes effect on the next swap.
+  const resetAggregators = () => {
+    for (const e of engines) for (const a of e.kyber?.adapters || []) { a.cache?.clear?.(); if ('cooldownUntil' in a) a.cooldownUntil = 0; a.warned?.clear?.(); }
+  };
+
   const rpcView = () => {
     // The order of rpc.eps is always the same as cfg.chain.endpoints (built from the same
     // list), so they are matched by index — matching by URL is wrong if two endpoints
@@ -287,6 +317,7 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
         authFromEnv: envName(cfg, 'server.auth_token'),
         telegram: tgView(),
         gmgn: gmgnView(),
+        aggregators: aggView(),
         loop: {
           poll_ms: cfg.loop?.poll_ms ?? 1500, max_block_span: cfg.loop?.max_block_span ?? 1500,
           sync_seconds: cfg.loop?.sync_seconds ?? 30,
@@ -414,6 +445,63 @@ function createSettingsRoutes({ engine, engines = [engine], store, cfg, cfgPath,
       log(`pemulihan dari cadangan ${backup.createdAt}: ${[...(walletRes ? ['wallet'] : []), ...staged].join(', ')}${staged.length ? ' — bot dinyalakan ulang' : ''}`);
       if (staged.length) setTimeout(restart, 1500).unref?.();
       return { ok: true, wallet: walletRes, staged, restarting: staged.length > 0 };
+    },
+
+    // ---- swap aggregators ----
+    // { mode?, order?, id?, enabled?, keys?: { field: value } } — value '' clears the field.
+    'POST /api/settings/aggregators': async (req) => {
+      const b = await readBody(req);
+      const r = router();
+      if (!r?.byId) return { error: 'Router swap belum siap.' };
+      const agg = cfg.aggregators = { ...(cfg.aggregators || {}) };
+      if (b.mode != null) {
+        if (!['best', 'order'].includes(b.mode)) return { error: 'Mode agregator harus best atau order.' };
+        agg.mode = b.mode;
+      }
+      if (b.order != null) {
+        if (!Array.isArray(b.order) || b.order.some((id) => !r.byId.has(id)) || new Set(b.order).size !== b.order.length) return { error: 'Urutan agregator tidak valid.' };
+        agg.order = [...b.order];
+      }
+      if (b.id != null) {
+        if (!r.byId.has(b.id)) return { error: 'Agregator tidak dikenal.' };
+        const cur = { ...(agg[b.id] || {}) };
+        if (b.enabled != null) cur.enabled = !!b.enabled;
+        for (const [f, v] of Object.entries(b.keys || {})) {
+          if (!(AGG_FIELDS[b.id] || []).includes(f)) return { error: `Kolom ${f} tidak dikenal untuk ${b.id}.` };
+          const locked = lockedByEnv(`aggregators.${b.id}.${f}`); if (locked) return locked;
+          const val = String(v ?? '').trim();
+          if (val.length > 512) return { error: 'Nilai terlalu panjang.' };
+          if (val) cur[f] = val; else delete cur[f];
+        }
+        agg[b.id] = cur;
+      }
+      saveCfg();
+      resetAggregators();
+      log(`agregator swap diubah${b.id ? `: ${b.id}` : ''}${b.mode ? ` · mode ${b.mode}` : ''}`);
+      return { ok: true, aggregators: aggView() };
+    },
+    // Live comparison: every aggregator quotes the same sale (10 USDG → native coin by
+    // default) — the numbers the best-route mode would compare. Inactive ones say why.
+    'POST /api/settings/aggregators/test': async (req) => {
+      const b = await readBody(req);
+      const r = router();
+      if (!r?.byId) return { error: 'Router swap belum siap.' };
+      const usd = Math.min(1000, Math.max(1, Number(b.usd) || 10));
+      const amountIn = BigInt(Math.round(usd * 10 ** chain.usdgDecimals));
+      const ids = b.id ? [b.id] : r.order();
+      resetAggregators();
+      const rows = await Promise.all(ids.map(async (id) => {
+        const a = r.byId.get(id);
+        if (!a) return { id, error: 'tidak dikenal' };
+        if (!a.enabled()) return { id, label: a.label, skipped: a.blocker() };
+        const t0 = Date.now();
+        const q = await a.quote(chain.ADDR.usdg, chain.ADDR.native, amountIn).catch((e) => ({ error: e.message }));
+        const ms = Date.now() - t0;
+        if (!q || q.error) return { id, label: a.label, ms, error: q?.error || 'tidak ada rute / API menolak (lihat log)' };
+        return { id, label: a.label, ms, amountOut: Number(q.amountOut) / 1e18, dex: q.dex, usdOut: q.usdOut ?? null };
+      }));
+      const best = rows.filter((x) => x.amountOut > 0).sort((x, y) => y.amountOut - x.amountOut)[0];
+      return { ok: true, usd, symbolIn: chain.usdgSymbol, symbolOut: chain.nativeSymbol, rows, best: best?.id || null };
     },
 
     // ---- mode ----

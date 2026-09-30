@@ -7,6 +7,7 @@ const { Watcher } = require('./watcher');
 const { Positions } = require('./positions');
 const { Executor, isNative } = require('./executor');
 const { Kyber } = require('./kyber');
+const { SwapRouter, aggLabel } = require('./swaprouter');
 const { pickSwapPool } = require('./swappool');
 const { Compound } = require('./compound');
 const { Capital } = require('./capital');
@@ -75,7 +76,9 @@ class Engine {
     this.exec = new Executor({ rpc, store, chain, cfg, log: this.log });
     // Each transaction's gas is booked in USD at the native (ETH/BNB) price at that time (see waitReceipt).
     this.exec.ethUsd = () => this.ethUsd;
-    this.kyber = new Kyber({ exec: this.exec, rpc, cfg, chain, log: this.log });
+    // `kyber` is the swap entry point for the whole engine: every enabled aggregator (Kyber,
+    // OKX, LI.FI, 0x, 1inch, OpenOcean), best route or fallback order — see swaprouter.js.
+    this.kyber = new SwapRouter({ exec: this.exec, rpc, cfg, chain, log: this.log });
     this.ethUsd = cfg.prices?.eth_usd || 2500;
     this.cursor = 0;
     this.head = 0;
@@ -1133,7 +1136,7 @@ class Engine {
         this.store.log('warn', `jembatan via Kyber tidak jadi (${e.message}) — mencoba pool langsung`, { quiet: true });
       }
       if (r) {
-        notes.push(`jembatan ${direction} via Kyber (${r.quote.dex})`);
+        notes.push(`jembatan ${direction} via ${aggLabel(r.quote)} (${r.quote.dex})`);
         return this.wrapIfWeth(quoteTok, needQuoteRaw, balOf, notes);
       }
       if (!kyberFailed) {
@@ -1609,7 +1612,7 @@ class Engine {
         this.log(`zap via Kyber tidak jadi (${e.message}) — coba pool langsung`);
       }
       if (kz) {
-        notes.push(`zap ${idx === 0 ? 'beli token0' : 'beli token1'} via Kyber`);
+        notes.push(`zap ${idx === 0 ? 'beli token0' : 'beli token1'} via ${aggLabel(kz?.quote)}`);
         noteZap(kz.hash, kz.amountOut ?? null);
         bal = await this.balancesAfterSwap([plan.token0, plan.token1], buyTok, boughtBefore, kz.amountOut);
         continue;

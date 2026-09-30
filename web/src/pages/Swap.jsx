@@ -316,6 +316,7 @@ function Holdings({ tokens, dari: from, onUse, onRemove, onImport, harga: price,
 // did not become an LP, fee sales, bridge, gas top-up, WETH — plus fee claims & compounds.
 // Old rows (before token & amount were recorded) only have their USD value.
 const STATUS_ICON = { sukses: CircleCheck, pending: Clock, gagal: CircleX };
+const AGG = { okx: 'OKX', lifi: 'LI.FI', zerox: '0x', oneinch: '1inch', openocean: 'OpenOcean' };
 // DEX names from Kyber arrive raw ("uniswapv3", "uniswap-v4"); tidy up only the known ones.
 const dexName = (s) => String(s).replace(/^uniswap-?v(\d)$/i, 'Uniswap v$1').replace(/^kyberswap.*/i, 'KyberSwap');
 const STATUS_CLS = {
@@ -374,6 +375,7 @@ function SwapRow({ x }) {
   const routeVal = [
     x.route === 'pool' && <span key="rt">{t('pool langsung')}</span>,
     x.route === 'kyber' && <span key="rt" className="truncate">{d.dex ? t('Kyber lewat {d}', { d: dexName(d.dex) }) : 'Kyber'}</span>,
+    x.route && !['pool', 'kyber'].includes(x.route) && <span key="rt" className="truncate">{d.dex ? t('{a} lewat {d}', { a: AGG[x.route] || x.route, d: dexName(d.dex) }) : (AGG[x.route] || x.route)}</span>,
     x.gasUsd != null && <span key="gas" className="num">{t('gas {v}', { v: usd(x.gasUsd, x.gasUsd < 0.01 ? 4 : 2) })}</span>,
   ].filter(Boolean);
   const Chip = () => (

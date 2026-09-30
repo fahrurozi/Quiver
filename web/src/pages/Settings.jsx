@@ -1,7 +1,7 @@
 import { chainInfo } from '../chain';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Chip, Checkbox, Separator, Tabs, toast } from '@heroui/react';
-import { Pencil, Activity as Pulse, Trash2, KeyRound, Unlock, ChevronUp, ChevronDown, Copy, Wallet, Network, Fuel, Bell, MessageCircle, Settings2, ShieldCheck, ShieldAlert, ChartCandlestick, Coins, RefreshCw, DatabaseBackup, Download, ArchiveRestore } from 'lucide-react';
+import { Pencil, Activity as Pulse, Trash2, KeyRound, Unlock, ChevronUp, ChevronDown, Copy, Wallet, Network, Fuel, Bell, MessageCircle, Settings2, ShieldCheck, ShieldAlert, ChartCandlestick, Coins, RefreshCw, DatabaseBackup, Download, ArchiveRestore, Shuffle, Trophy } from 'lucide-react';
 import { Wallet as EthersWallet } from 'ethers';
 import SettingInfo from '../components/SettingInfo';
 import { get, post } from '../api';
@@ -25,6 +25,7 @@ const SETTINGS_NAV = [
   ['loop', 'Mesin', 'Pemindaian dan harga ETH', Settings2],
   ['display', 'Tampilan', 'Sensor nilai dan mata uang kedua', Coins],
   ['security', 'Keamanan', 'Akses masuk dasbor', ShieldCheck],
+  ['aggregators', 'Agregator swap', 'Kyber, OKX, LI.FI, 0x, 1inch, OpenOcean', Shuffle],
   ['backup', 'Cadangan', 'Unduh & pulihkan pengaturan, data, wallet', DatabaseBackup],
 ];
 
@@ -731,6 +732,159 @@ function SecurityTab({ d }) {
   );
 }
 
+// ---------------- swap aggregators ----------------
+const AGG_INFO = {
+  kyber: ['Tanpa key. Calldata-nya dibaca dan dicocokkan kolom demi kolom sebelum dikirim — pengaman paling ketat.', null],
+  okx: ['Butuh API key, secret key, dan passphrase. Sekitar 1 permintaan per detik per key.', 'https://web3.okx.com/onchainos/dev-portal'],
+  lifi: ['Jalan tanpa key (batas laju ketat); key gratis menaikkan batasnya. LI.FI sendiri merutekan lewat agregator dan DEX lain.', 'https://portal.li.fi'],
+  zerox: ['Butuh API key dari dashboard 0x. Mesin swap yang dipakai Coinbase Wallet dan MetaMask.', 'https://dashboard.0x.org'],
+  oneinch: ['Butuh API key dari portal 1inch. API-nya tidak memberi minimum terima, jadi hasil simulasi yang dijadikan patokan.', 'https://business.1inch.com/portal'],
+  openocean: ['Butuh API key pro — API publiknya memblokir bot lewat Cloudflare.', 'https://openocean.finance'],
+};
+const AGG_FIELD_LABEL = { api_key: 'API key', secret_key: 'Secret key', passphrase: 'Passphrase', project_id: 'Project ID (opsional)' };
+
+function AggCard({ it, first, last, move, onSaved }) {
+  const { t } = useI18n();
+  const [vals, setVals] = useState({});
+  const [busy, setBusy] = useState('');
+  const [info, link] = AGG_INFO[it.id] || ['', null];
+  const editable = it.fields.filter((f) => !f.fromEnv);
+  const dirty = Object.values(vals).some((v) => v);
+  const status = it.active ? ['success', 'Aktif'] : !it.enabled ? ['default', 'Dimatikan'] : !it.supported ? ['warning', 'Chain ini belum didukung'] : ['warning', 'Butuh API key'];
+  const save = async (k, body, ok) => {
+    setBusy(k);
+    const r = await post('/api/settings/aggregators', { id: it.id, ...body });
+    setBusy('');
+    if (r.error) return toast.danger(reason(r.error));
+    toast.success(tt(ok));
+    setVals({});
+    onSaved(r.aggregators);
+  };
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col">
+          <Button size="sm" variant="ghost" isIconOnly aria-label={t('Naikkan')} isDisabled={first} onPress={() => move(-1)}><ChevronUp className="size-4" /></Button>
+          <Button size="sm" variant="ghost" isIconOnly aria-label={t('Turunkan')} isDisabled={last} onPress={() => move(1)}><ChevronDown className="size-4" /></Button>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{it.label}</span>
+            <Chip size="sm" variant="soft" color={status[0]}>{t(status[1])}</Chip>
+            {it.fields.some((f) => f.set) && <Chip size="sm" variant="soft">{t('key terpasang')}</Chip>}
+          </div>
+          <p className="mt-1 text-sm text-muted">{t(info)}{link && <> <a href={link} target="_blank" rel="noreferrer" className="text-accent hover:underline">{t('Daftar key')}</a></>}</p>
+        </div>
+        <Toggle label={it.enabled ? 'Nyala' : 'Mati'} value={it.enabled} isDisabled={busy === 'toggle'}
+          onChange={(v) => save('toggle', { enabled: v }, v ? 'Agregator dinyalakan' : 'Agregator dimatikan')} />
+      </div>
+      {it.fields.length > 0 && (
+        <>
+          {it.fields.filter((f) => f.fromEnv).map((f) => <EnvNotice key={f.name} name={f.fromEnv} what={AGG_FIELD_LABEL[f.name]} />)}
+          {editable.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {editable.map((f) => (
+                <Text key={f.name} label={AGG_FIELD_LABEL[f.name]} type="password" mono autoComplete="off"
+                  placeholder={f.masked || (it.keyOptional ? t('opsional') : '')} value={vals[f.name] || ''}
+                  onChange={(v) => setVals((x) => ({ ...x, [f.name]: v }))} />
+              ))}
+            </div>
+          )}
+          {editable.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" isDisabled={!dirty} isPending={busy === 'key'} onPress={() => save('key', { keys: vals }, 'Key tersimpan — berlaku di swap berikutnya')}>{t('Simpan key')}</Button>
+              {editable.some((f) => f.set) && (
+                <Button size="sm" variant="outline" isPending={busy === 'rm'} onPress={async () => {
+                  if (await ask({ title: tt('Lepas key {a}?', { a: it.label }), confirm: tt('Lepas'), danger: true })) {
+                    save('rm', { keys: Object.fromEntries(editable.map((f) => [f.name, ''])) }, 'Key dilepas');
+                  }
+                }}>{t('Lepas key')}</Button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function AggregatorsTab({ d, setD }) {
+  const { t } = useI18n();
+  const ag = d.aggregators;
+  const [cmp, setCmp] = useState(null);
+  const [busy, setBusy] = useState('');
+  if (!ag) return <Section title="Agregator swap"><Notice>{t('Router swap belum siap. Muat ulang halaman sebentar lagi.')}</Notice></Section>;
+  const setAg = (aggregators) => setD((prev) => ({ ...prev, aggregators }));
+  const post2 = async (k, body, ok) => {
+    setBusy(k);
+    const r = await post('/api/settings/aggregators', body);
+    setBusy('');
+    if (r.error) return toast.danger(reason(r.error));
+    if (ok) toast.success(tt(ok));
+    setAg(r.aggregators);
+  };
+  const move = (i, dir) => {
+    const order = [...ag.order];
+    const j = i + dir;
+    [order[i], order[j]] = [order[j], order[i]];
+    post2('order', { order });
+  };
+  const compare = async () => {
+    setBusy('cmp'); setCmp(null);
+    const r = await post('/api/settings/aggregators/test', { usd: 10 });
+    setBusy('');
+    if (r.error) return toast.danger(reason(r.error));
+    setCmp(r);
+  };
+  const activeN = ag.items.filter((x) => x.active).length;
+  return (
+    <Section title="Agregator swap" desc="Semua swap bot — zap saat membuka LP, jembatan ETH/USDG, jual sisa dan fee, isi gas, swap manual — lewat agregator di bawah. Perubahan berlaku di swap berikutnya, tanpa restart.">
+      <div className="flex flex-col gap-2">
+        <div className="font-medium">{t('Cara memilih rute')}</div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={ag.mode === 'best' ? 'primary' : 'outline'} isPending={busy === 'mode' && ag.mode !== 'best'} onPress={() => ag.mode !== 'best' && post2('mode', { mode: 'best' }, 'Mode: rute terbaik')}>
+            <Trophy className="size-4" />{t('Rute terbaik')}</Button>
+          <Button size="sm" variant={ag.mode === 'order' ? 'primary' : 'outline'} isPending={busy === 'mode' && ag.mode !== 'order'} onPress={() => ag.mode !== 'order' && post2('mode', { mode: 'order' }, 'Mode: urutan cadangan')}>
+            {t('Urutan cadangan')}</Button>
+        </div>
+        <p className="text-sm text-muted">{t(ag.mode === 'best'
+          ? 'Setiap swap menanyai semua agregator yang aktif sekaligus, lalu yang memberi hasil terbanyak yang dieksekusi. Kalau gagal, pindah ke peringkat berikutnya. Urutan di bawah hanya jadi penentu kalau hasilnya seri.'
+          : 'Agregator dicoba satu per satu sesuai urutan di bawah; yang berikutnya hanya dipakai kalau yang sebelumnya tidak menemukan rute, terlalu rugi, atau gagal.')}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onPress={compare} isPending={busy === 'cmp'} isDisabled={!activeN}><Pulse className="size-4" />{t('Bandingkan sekarang')}</Button>
+        <span className="text-sm text-muted">{t('{n} agregator aktif. Membandingkan kutipan 10 {q} → {n2} tanpa mengirim transaksi.', { n: activeN, q: chainInfo().usdgSymbol, n2: chainInfo().nativeSymbol })}</span>
+      </div>
+      {cmp && (
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted"><tr>
+              <th className="px-3 py-2">{t('Agregator')}</th><th className="px-3 py-2 text-right">{t('Hasil')}</th><th className="px-3 py-2">{t('Lewat')}</th><th className="px-3 py-2 text-right">{t('Waktu')}</th>
+            </tr></thead>
+            <tbody>
+              {cmp.rows.map((r) => (
+                <tr key={r.id} className="border-t border-border">
+                  <td className="px-3 py-2 font-medium">{r.label || r.id} {cmp.best === r.id && <Chip size="sm" variant="soft" color="success">{t('terbaik')}</Chip>}</td>
+                  <td className="num px-3 py-2 text-right">{r.amountOut != null ? `${r.amountOut.toLocaleString(fmtLocale(), { maximumFractionDigits: 8 })} ${cmp.symbolOut}` : <span className="text-muted">—</span>}</td>
+                  <td className="px-3 py-2 text-muted">{r.skipped ? t(r.skipped) : r.error ? <span className="text-danger">{reason(r.error)}</span> : r.dex}</td>
+                  <td className="num px-3 py-2 text-right text-muted">{r.ms != null ? `${r.ms} ms` : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {ag.items.map((it, i) => (
+          <AggCard key={it.id} it={it} first={i === 0} last={i === ag.items.length - 1} move={(dir) => move(i, dir)} onSaved={setAg} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 // ---------------- backup & restore ----------------
 const BACKUP_PARTS = [
   ['config', 'Pengaturan', 'config.json: aturan, target, RPC, gas, notifikasi, Telegram. Rahasia yang diatur lewat .env tidak ikut.'],
@@ -960,6 +1114,7 @@ export default function Settings() {
                 </Tabs.Panel>
                 <Tabs.Panel id="display"><DisplayTab d={d} reload={load} /></Tabs.Panel>
                 <Tabs.Panel id="security"><SecurityTab d={d} /></Tabs.Panel>
+                <Tabs.Panel id="aggregators"><AggregatorsTab d={d} setD={setD} /></Tabs.Panel>
                 <Tabs.Panel id="backup"><BackupTab d={d} /></Tabs.Panel>
               </div>
             </Tabs>
