@@ -48,7 +48,7 @@ export function useResync(reload, path = '/api/positions/sync') {
   useEffect(() => () => { alive.current = false; }, []);
   const run = useCallback(async () => {
     setBusy(true);
-    try { await post(path); } catch { /* galat muncul lewat data yang diambil di bawah */ }
+    try { await post(path); } catch { /* the error surfaces through the data fetched below */ }
     try { await reload(); } finally { if (alive.current) setBusy(false); }
   }, [path, reload]);
   return [run, busy];

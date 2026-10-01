@@ -151,7 +151,7 @@ class WalletV3 {
             token0: String(d[2]).toLowerCase(), token1: String(d[3]).toLowerCase(), fee: Number(d[4]),
             tickLower: Number(d[5]), tickUpper: Number(d[6]), liquidity: BigInt(d[7]),
           });
-        } catch { /* NFT sudah dibakar: tidak terbaca lagi, dilewati */ }
+        } catch { /* NFT already burned: unreadable now, skipped */ }
       });
       if (onProgress) onProgress({ phase: 'posisi v3', scanned: i + part.length, total: ids.length * 2 });
     }

@@ -435,7 +435,7 @@ const RULE_GROUPS = [
       F.bool('sell_leftover', 'Jual otomatis memecoin sisa'),
       F.bps('sell_max_loss_bps', 'Batas rugi saat menjual sisa', { hi: 10000, when: (r) => r.exit.sell_leftover }),
       F.int('leftover_retry_sec', 'Cek ulang sisa tiap (detik)', { lo: 1, hi: 3600, when: (r) => r.exit.sell_leftover,
-        help: 'Satu kutipan Kyber per token per interval; dijual begitu ruginya di bawah batas. Terlalu rapat bisa kena batas laju Kyber.' }),
+        help: 'Satu kutipan per token per interval; dijual begitu ruginya di bawah batas. Terlalu rapat bisa kena batas laju agregator.' }),
     ],
   },
   {
@@ -753,7 +753,7 @@ class Telegram {
     this.cfg.telegram = { ...(this.cfg.telegram || {}), chat_ids: ids };
     this.saveCfg();
     this.log(`telegram: chat ${chatId} disambungkan`);
-    this.syncMenuButton().catch(() => { /* sudah dicatat di dalam */ });
+    this.syncMenuButton().catch(() => { /* already logged inside */ });
     return { ok: true };
   }
 
@@ -803,7 +803,7 @@ class Telegram {
   // The old loop is stopped first so there are not two listeners on one update queue.
   async restart() {
     this.gen++;
-    try { this.ac?.abort(); } catch { /* belum ada permintaan berjalan */ }
+    try { this.ac?.abort(); } catch { /* no request in flight yet */ }
     this.me = null;
     return this.start();
   }
@@ -1375,7 +1375,7 @@ class Telegram {
       case 'swX': {
         const d = s.sw || {};
         if (ack) await ack(tr("Menukar…"));
-        await out(tr("⏳ Menukar lewat Kyber…"));
+        await out(tr("⏳ Menukar lewat agregator…"));
         const r = await this.api('POST', '/api/manual/swap', { tokenIn: d.from, tokenOut: d.to, amount: d.amount });
         if (r.error) return out(tr("⛔ <b>Swap gagal</b>\n<code>{0}</code>", [esc(note(r.error))]), kb([[btn('↩︎ Swap', 'sw'), BACK_HOME]]));
         s.sw = { ...d, amount: null };
@@ -2958,7 +2958,7 @@ class Telegram {
     const owns = t.tokens.filter((x) => x.amount > 0);
     const L = [
       tr("<b>🔁 Swap</b>"),
-      tr("Menukar lewat agregator Kyber — rute yang sama dipakai bot untuk zap dan menjual sisa."),
+      tr("Menukar lewat agregator yang aktif (rute terbaik) — rute yang sama dipakai bot untuk zap dan menjual sisa."),
       '',
       table([
         [tr("dari"), d.symFrom || tr('— belum dipilih')],

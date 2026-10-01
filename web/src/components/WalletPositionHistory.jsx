@@ -183,8 +183,8 @@ function Salinan({ q, p }) {
       ) : (
         <div className="text-xs text-muted">{t('Salinan ini tidak pernah jadi posisi — transaksinya {s}.', { s: t(q.status === 'pending' ? 'masih menggantung' : 'gagal') })}</div>
       )}
-      {/* Modal kita hampir tidak pernah sebesar modal target, jadi dolarnya tidak
-          bisa diadu; persen terhadap modal masing-masing bisa. */}
+      {/* Our capital is almost never as large as the target's, so the dollars cannot be
+          compared; the percent of each one's own capital can. */}
       {q.pnlPct != null && p.pnlPct != null && !q.syncing && (
         <div className="mt-2 text-xs text-muted">
           {t('Target {a} atas modalnya · kita {b} atas modal kita', { a: pct(p.pnlPct, 2), b: pct(q.pnlPct, 2) })}
@@ -233,9 +233,9 @@ function OurSide({ copy, p, onClose }) {
                 <p className="mt-1 text-xs text-muted">{t('Target ini sedang dimatikan.')}</p>
               )}
             </div>
-            {/* Mesin sudah tidak akan mengambilnya lagi; masuk sendiri masih bisa.
-                Halaman LP manual yang memutuskan boleh atau tidak — di sini cuma
-                pool dan rentangnya yang dititipkan. */}
+            {/* The engine will no longer pick it up; entering by hand still works.
+                The manual LP page decides whether it is allowed — here only the
+                pool and its range are handed over. */}
             {p.pool_ref && (
               <Button size="sm" variant="outline" className="shrink-0"
                 onPress={() => { onClose(); location.hash = manualHash(p); }}>

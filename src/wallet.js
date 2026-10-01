@@ -463,7 +463,7 @@ class WalletResearch {
             [{ poolId: info.poolId, tickLower: tl, tickUpper: tu, tokenId: id }],
             new Map([[info.poolId, s0.tick]]), this.rpc);
           if (f) liveFeeQ = vq(f.fee0, f.fee1);
-        } catch { /* fee tidak terbaca: biarkan 0 */ }
+        } catch { /* fee unreadable: leave 0 */ }
       }
     }
     // An open position that has already partially withdrawn: that withdrawal result (returnedQ)
@@ -675,7 +675,7 @@ class WalletResearch {
       try {
         const s = await this.chain.slot0V3(a);
         if (s) slotBy.set(a, s);
-      } catch { /* satu pool gagal tidak menjatuhkan sisanya */ }
+      } catch { /* one failing pool does not take down the rest */ }
     }
 
     // Running fee: v4 from PoolManager storage (one batch, also carrying the current
@@ -703,7 +703,7 @@ class WalletResearch {
       try {
         const f = await unclaimedV3(this.chain, list.map((r) => BigInt(r.token_id)), owner, this.chain.npmFor(venue), this.rpc);
         list.forEach((r, i) => { if (f[i]) feeBy.set(rowKey(r), f[i]); });
-      } catch { /* fee tidak terbaca: pakai yang tersimpan */ }
+      } catch { /* fee unreadable: use the stored one */ }
     }
 
     for (const r of fresh) {

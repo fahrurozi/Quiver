@@ -43,7 +43,7 @@ export function Pair({ p, link = true }) {
         {link ? <a href={'#positions/' + p.id} className="font-medium whitespace-nowrap hover:underline">{name}</a>
           : <PairName token0={p.token0} token1={p.token1} symbol0={p.symbol0} symbol1={p.symbol1} pool={p.pool_ref} sep="/" className="font-medium" />}
         <div className="mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted">
-          {/* Keamanan token menurut GMGN — hanya muncul kalau API key-nya terpasang. */}
+          {/* Token safety per GMGN — only shown when the API key is installed. */}
           <GmgnDot token={baseTokenOf(p)} />
           <span className="uppercase">{p.venue}</span><span>·</span><span className="num">{num(p.fee / 10000, 2)}%</span>
           {p.syncing ? <><span>·</span><Spinner size="sm" color="current" className="size-3" />
@@ -138,9 +138,9 @@ function Source({ p }) {
         <div className="mt-0.5 text-xs" title={t('modal target {v}', { v: usd(m.costUsd) })}>
           <span className="text-muted">{t('PnL target')}</span>{' '}
           <span className={`num ${tone(m.pnlUsd)}`}>{usd(m.pnlUsd)}{m.pnlPct == null ? '' : ` ${pct(m.pnlPct, 2)}`}</span>
-          {/* baris sendiri, bukan disambung dengan titik: kalimatnya sudah sepanjang
-              kolom, dan pemisah yang menggantung di ujung baris lebih berisik
-              daripada satu baris tambahan */}
+          {/* own line, not joined with a dot: the sentence is already as long as
+              the column, and a separator dangling at the line end is noisier
+              than one extra line */}
           {m.stale && <div className="text-muted">{t('masih terbuka')}</div>}
         </div>
       )}

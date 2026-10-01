@@ -87,7 +87,7 @@ export default function TargetSide({ p, className = 'mb-4' }) {
           {t('Target {a} atas modalnya · kita {b} atas modal kita', { a: pct(pnlPct, 2), b: pct(ours, 2) })}
         </div>
       )}
-      {/* Kenapa angkanya boleh berbeda dengan yang kita lihat di halaman wallet. */}
+      {/* Why these numbers may differ from what we see on the wallet page. */}
       <p className="mt-2 text-xs text-muted">
         {research
           ? (m.stale

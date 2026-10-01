@@ -110,9 +110,9 @@ function Composition({ now, ethUsd }) {
       onMouseEnter={() => setHot(r.k)} onMouseLeave={() => setHot(null)}>
       <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: r.color }} />
       <span className="min-w-0 flex-1 truncate">{t(r.k)}{r.sub && <span className="ml-1.5 text-xs text-muted">{r.sub}</span>}</span>
-      {/* Rupiah-nya di bawah dolarnya, bukan di sampingnya: kolom ini cuma sepertiga
-          lebar layar, dan menyandingkan keduanya memakan ruang label sampai
-          "Posisi LP" tinggal "P.". */}
+      {/* The rupiah goes under the dollar, not beside it: this column is only a third of
+          the screen, and putting both side by side eats the label space until
+          "Posisi LP" shrinks to "P.". */}
       <span className="flex shrink-0 flex-col items-end leading-tight">
         <span className="num font-medium">{usd(r.v)}</span>
         <Fx v={r.v} className="text-[0.6875rem]" />
@@ -413,13 +413,13 @@ export default function Overview() {
       <PageHeader group="Pemantauan" title="Ringkasan">
         <ShareButton label="Bagikan total PnL" isDisabled={!now} card={now ? totalCard({ pnl: now.netPnl ?? now.pnl, net: now.netPnl != null }) : null} />
       </PageHeader>
-      {/* Kartu PnL harian: hari yang diklik di kalender. Server merakit datanya sendiri. */}
+      {/* Daily PnL card: the day clicked in the calendar. The server assembles its data itself. */}
       <ShareDialog card={shareDay && cal ? dailyCard({ day: shareDay, pnl: cal.daily[shareDay] }) : null} onClose={() => setShareDay(null)} />
       <PositionHistory id={hist} onClose={() => setHist(null)} />
-      {/* Satu blok ringkasan, dua tingkat: dua angka yang dicari setiap kali halaman
-          dibuka (berapa nilainya, untung berapa) berdiri sendiri dalam kartu besar di
-          kiri; empat ukuran kesehatan LP jadi ubin di sebelahnya. Empat kartu seukuran
-          sama membuat "total portofolio" dan "win rate" tampak sama pentingnya. */}
+      {/* One summary block, two tiers: the two numbers looked for every time the page is
+          opened (what it is worth, how much profit) stand alone in a big card on the
+          left; four LP health measures become tiles beside it. Four equally sized cards
+          make "total portfolio" and "win rate" look equally important. */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Hero className="col-span-2 lg:row-span-2">
           <HeroFigure label="Total portofolio" value={now ? usd(now.value) : '—'} fx={now?.value}
@@ -437,7 +437,7 @@ export default function Overview() {
               aside={now?.capital > 0 ? <span className={`num text-sm font-semibold ${tone(now.pnl)}`}>{pct((now.pnl / now.capital) * 100, 2)}</span> : null}
               sub={!now ? null : t('terealisasi {r} · berjalan {u}', { r: usd(now.realizedUsd), u: usd(now.unrealizedUsd) })} />}
         </Hero>
-        {/* Fee tanpa APR cuma memberi tahu jumlahnya, bukan apakah modalnya bekerja. */}
+        {/* Fee without APR only gives the amount, not whether the capital is working. */}
         <Stat label="Fee terkumpul" value={usd(s.feeUsd)} fx={s.feeUsd}
           badge={portApr == null ? null : (
             <span className="num shrink-0 rounded bg-success/12 px-1.5 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap text-success"
@@ -445,14 +445,14 @@ export default function Overview() {
               {t('APR {v}', { v: aprText(portApr) })}
             </span>)}
           sub={s.costUsd > 0 ? t('{p}% dari modal · belum diklaim', { p: num((s.feeUsd / s.costUsd) * 100, 2) }) : t('belum diklaim')} />
-        {/* Pertanyaan pokok LP: fee yang dihasilkan menutup impermanent loss atau tidak. */}
+        {/* The core LP question: whether the fees earned cover the impermanent loss. */}
         <Stat label="Fee vs IL" value={ilOpen == null ? '—' : usd(feeOpen + ilOpen)} fx={ilOpen == null ? null : feeOpen + ilOpen}
           valueClass={ilOpen == null ? '' : tone(feeOpen + ilOpen)}
           sub={<span title={t('Fee posisi terbuka ditambah impermanent loss-nya: selisih terhadap sekadar memegang token yang sama tanpa ber-LP.')}>
             {ilOpen == null ? t('IL belum terhitung') : t('fee {f} · IL {i}', { f: usd(feeOpen), i: usd(ilOpen) })}
           </span>} />
-        {/* Posisi di luar rentang berhenti menghasilkan fee — angka yang menentukan
-            apakah ada yang harus dikerjakan sekarang. */}
+        {/* Out-of-range positions stop earning fees — the number that decides
+            whether something has to be done right now. */}
         <Stat label="Posisi in-range" value={open.length ? `${inRangeN}/${open.length}` : '—'}
           valueClass={!open.length ? '' : inRangeN === open.length ? 'text-success' : 'text-warning'}
           sub={!open.length ? t('belum ada posisi terbuka')
@@ -529,7 +529,7 @@ export default function Overview() {
         )}
       </Panel>
 
-      {/* Rata tinggi: kolom kanan meregang setinggi kalender, tidak meninggalkan celah */}
+      {/* Equal height: the right column stretches to the calendar's height, leaving no gap */}
       <div className="mb-4 grid gap-3 lg:grid-cols-5">
         <Panel title="Kalender PnL" desc="PnL terealisasi per hari posisi ditutup · klik hari untuk membuat kartu bagikan" className="lg:col-span-3" bodyClass="flex-1">
           {cal ? <PnlCalendar daily={cal.daily} counts={cal.counts} empty="Belum ada posisi ditutup" onShare={(k) => setShareDay(k)} /> : <Loading />}
@@ -557,10 +557,10 @@ export default function Overview() {
               <Dot tone={lag < 60 ? 'success' : 'warning'} />
               <span className="ml-1.5">{lag === 0 ? t('sinkron') : t('{n} blok', { n: num(lag) })}</span>
             </KV>
-            {/* "Tertinggal" bisa menipu: blok terkini hanya dibaca di dalam siklus
-                pemindaian, jadi siklus yang macet membekukan keduanya sekaligus dan
-                lag tetap 0 padahal bot sudah lama buta. Umur pemindaian terakhir yang
-                berhasil tidak bisa ditipu seperti itu. */}
+            {/* "Lagging" can mislead: the latest block is only read inside a scan cycle,
+                so a stuck cycle freezes both at once and lag stays 0 although the bot has been
+                blind for a long time. The age of the last successful scan cannot be fooled
+                that way. */}
             <KV label="Pemindaian terakhir">
               <Dot tone={scanStale ? 'warning' : 'success'} />
               <span className="ml-1.5">{ago(d.chain.lastScan)}</span>
@@ -584,7 +584,7 @@ export default function Overview() {
                       <span className="min-w-0 truncate" title={text}>{text.charAt(0).toUpperCase() + text.slice(1)}</span>
                       <span className="num shrink-0 font-medium">{num(r.n)}{share != null && <span className="ml-1.5 inline-block w-9 text-end text-xs font-normal text-muted">{num(share, 0)}%</span>}</span>
                     </div>
-                    {/* batang tipis: perbandingan antaralasan terbaca tanpa membaca angkanya */}
+                    {/* thin bar: the comparison between reasons reads without reading the numbers */}
                     <div className="mt-1.5 h-1 rounded-full bg-default">
                       <div className="h-1 rounded-full bg-muted/70" style={{ width: `${(r.n / maxSkip) * 100}%` }} />
                     </div>
@@ -604,7 +604,7 @@ export default function Overview() {
                   <div key={x.hash} className="flex items-center gap-3 px-4 py-2 text-sm">
                     <Dot tone={TXSTATUS[x.status]?.[1] || 'default'} title={TXSTATUS[x.status]?.[0] || x.status} />
                     <span className="min-w-0 flex-1 truncate">{t(TXKIND[x.kind] || x.kind)}</span>
-                    {/* status bukan hanya warna titik — dan tidak ikut terpotong bersama namanya */}
+                    {/* status is not only the dot colour — and is not truncated together with the name */}
                     {x.status !== 'sukses' && <span className={`shrink-0 text-xs font-medium ${failed ? 'text-danger' : 'text-warning'}`}>{t(TXSTATUS[x.status]?.[0] || x.status)}</span>}
                     <a href={txHref(x.hash)} target="_blank" rel="noreferrer" className="mono shrink-0 text-muted hover:text-accent hover:underline">{short(x.hash)}</a>
                     <span className="shrink-0 text-end whitespace-nowrap tabular-nums text-xs text-muted">{ago(x.ts)}</span>

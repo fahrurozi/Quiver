@@ -187,7 +187,7 @@ function AutoSwap({ p }) {
               <div className="flex items-center gap-2 text-xs text-muted">
                 <span className="flex size-4 items-center justify-center rounded-full border border-border text-[0.625rem]">{i + 1}</span>
                 <span className="font-medium text-foreground">{t(KIND[s.jenis] || s.jenis, { s: s.ke.symbol })}</span>
-                {s.jenis === 'zap' || s.jenis === 'jembatan' ? <span>· Kyber</span> : <span>· {t('1:1, tanpa slippage')}</span>}
+                {s.jenis === 'zap' || s.jenis === 'jembatan' ? <span>· {t('Agregator swap')}</span> : <span>· {t('1:1, tanpa slippage')}</span>}
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                 <span className="flex items-center gap-1.5">
@@ -204,7 +204,7 @@ function AutoSwap({ p }) {
               {s.maxLossBps != null && (
                 <div className="text-xs text-muted">
                   {t('dibatalkan kalau rugi rute lebih dari {r}%', { r: num(s.maxLossBps / 100, 2) })}
-                  {s.estimate ? ' · ' + t('jumlah pasti dari kutipan Kyber saat eksekusi') : ''}
+                  {s.estimate ? ' · ' + t('jumlah pasti dari kutipan agregator saat eksekusi') : ''}
                 </div>
               )}
             </li>

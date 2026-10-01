@@ -641,7 +641,7 @@ class Engine {
         if (age < rules.filters.min_pool_age_minutes) {
           return this.decide(act.id, 'skip', `pool baru ${age.toFixed(0)} menit (< ${rules.filters.min_pool_age_minutes})`);
         }
-      } catch { /* kalau tidak terbaca, jangan halangi */ }
+      } catch { /* unreadable: do not block */ }
     }
     // Market filter: a pool whose liquidity or volume is thin does not produce fees
     // however much the target does there — the capital only bears the token's risk
@@ -2172,7 +2172,7 @@ class Engine {
         // A partial withdrawal that is already booked — not the tx that emptied it.
         if (d.decreaseProceeds) break;
         hash = r.hash; break;
-      } catch { /* detail lama tanpa JSON */ }
+      } catch { /* old detail without JSON */ }
     }
     let source = 'tx bot';
     if (!hash && pos.venue === 'v4' && pos.pool_ref && pos.token_id) {
@@ -2599,7 +2599,7 @@ class Engine {
       // Kyber does not know the route (a new token's pool is often not yet indexed): try selling
       // directly into a pool we know — the position's own pool and pools of the same pair.
       if (!r) { sold = amount; r = await this.sellViaPool(item, amount, rules); }
-      if (!r) throw new Error('Kyber tidak menemukan rute (pool langsung juga tidak bisa)');
+      if (!r) throw new Error('Tidak ada agregator yang menemukan rute (pool langsung juga tidak bisa)');
       const rest = amount - sold;
       // A partial sale is progress, not failure: the attempt counter and the
       // old quote are reset so the warning banner does not pile up as if stuck.
@@ -2766,9 +2766,9 @@ class Engine {
           // `loss != null` used to let a quote without a USD price slip straight into a
           // full sale — the same path that drained position #82.
           if (!q || loss == null || loss > rules.exit.sell_max_loss_bps) {
-            const why = !q ? 'Kyber tidak menemukan rute'
-              : loss == null ? 'rugi rute tidak terukur (Kyber tanpa harga USD dan tanpa pembanding)'
-                : `rute Kyber rugi ${(loss / 100).toFixed(1)}% (batas ${(rules.exit.sell_max_loss_bps / 100).toFixed(1)}%) — $${lossRef.usdIn.toFixed(2)} → $${lossRef.usdOut.toFixed(2)}`;
+            const why = !q ? 'Tidak ada agregator yang menemukan rute'
+              : loss == null ? 'rugi rute tidak terukur (agregator tanpa harga USD dan tanpa pembanding)'
+                : `rute agregator rugi ${(loss / 100).toFixed(1)}% (batas ${(rules.exit.sell_max_loss_bps / 100).toFixed(1)}%) — $${lossRef.usdIn.toFixed(2)} → $${lossRef.usdOut.toFixed(2)}`;
             const e = new Error(why);
             if (lossRef) e.loss = { lossBps: loss, maxLossBps: rules.exit.sell_max_loss_bps, usdIn: lossRef.usdIn, usdOut: lossRef.usdOut, dex: q.dex };
             // The full amount does not fit, but part of it may. Chunk search
@@ -2818,14 +2818,14 @@ class Engine {
     try {
       const st = JSON.parse(this.store.getState(this.sk('swap_seen'), '{}') || '{}');
       if (st.wallet === me) for (const a of st.tokens || []) set.add(String(a).toLowerCase());
-    } catch { /* daftar tabel tokens saja sudah cukup */ }
+    } catch { /* the tokens table list alone is enough */ }
     // Tokens added manually on the Swap page are included: precisely these
     // get stuck most often — they never were a position, so are not in the tokens
     // table, and have passed the Transfer scan window if they arrived long ago.
     try {
       const c = JSON.parse(this.store.getState(this.sk('swap_tokens'), '[]') || '[]');
       if (Array.isArray(c)) for (const a of c) if (/^0x[0-9a-f]{40}$/i.test(a)) set.add(String(a).toLowerCase());
-    } catch { /* daftar manual boleh kosong */ }
+    } catch { /* the manual list may be empty */ }
     // A quote asset is the destination, not leftover. Tokens of still-open positions are also not
     // touched: they are working material (zap, add liquidity), not junk.
     for (const a of Object.keys(this.chain.QUOTES)) set.delete(a);
@@ -2854,7 +2854,7 @@ class Engine {
       const usd = k?.usdOut ?? null;
       if (usd == null || usd < minUsd) {
         skipped.push({ token, label, usd,
-          why: !k ? 'Kyber tidak menemukan rute' : `cuma $${(usd || 0).toFixed(2)} (< $${minUsd})` });
+          why: !k ? 'Tidak ada agregator yang menemukan rute' : `cuma $${(usd || 0).toFixed(2)} (< $${minUsd})` });
         continue;
       }
       this.keepLeftover({ posId: null, target: null, token, quote: q, amount: amount.toString(), tries: 0,

@@ -241,7 +241,7 @@ function Holdings({ tokens, dari: from, onUse, onRemove, onImport, harga: price,
         <div className="divide-y divide-border">
           {shownVal.map((x, i) => (
             <div key={x.address}>
-            {/* pembatas kelompok: baris pertama yang tidak bernilai */}
+            {/* group divider: the first row that has no value */}
             {!hide && price === 'ok' && nValued > 0 && from0 + i === nValued && (
               <div className="border-b border-border bg-default/40 px-4 py-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-muted">
                 {t('Tanpa nilai ({n})', { n: nHidden })}
@@ -425,8 +425,8 @@ function SwapRow({ x }) {
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">{heading}</div>
         {[meta, routeVal].map((row, j) => row.length > 0 && (
           <div key={j} className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted">
-            {/* titik pemisah menempel di KANAN tiap butir kecuali terakhir: kalau barisnya
-                patah, tidak ada titik yatim di awal baris baru */}
+            {/* the separator dot sticks to the RIGHT of each item except the last: if the row
+                wraps, no orphan dot starts the new line */}
             {row.map((el, i) => <span key={el.key} className="flex min-w-0 items-center gap-1.5">{el}{i < row.length - 1 && <span aria-hidden="true">·</span>}</span>)}
           </div>
         ))}
@@ -435,7 +435,7 @@ function SwapRow({ x }) {
             <TriangleAlert className="mt-px size-3 shrink-0" /><span className="line-clamp-2 break-words">{x.error}</span>
           </div>
         )}
-        {/* di HP: hash & waktu pindah ke bawah supaya kolom kanan tidak menyempit */}
+        {/* on mobile: hash & time move below so the right column does not shrink */}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted sm:hidden">
           <Chip /><TxHash hash={x.hash} /><span aria-hidden="true">·</span><span className="tabular-nums">{ago(x.ts)}</span>
         </div>
@@ -702,7 +702,7 @@ export default function Swap() {
           )}
 
           <Card className="gap-0! p-2!">
-            {/* dari */}
+            {/* from */}
             <div className="rounded-md bg-default/50 p-4">
               <div className="flex items-center justify-between gap-3 text-xs text-muted">
                 <span className="font-medium">{t('Dari')}</span>

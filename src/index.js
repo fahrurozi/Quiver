@@ -176,7 +176,7 @@ async function main() {
   const old = otherInstanceAlive();
   if (old) { console.error(`Quiver sudah jalan (pid ${old}). Hentikan dulu: kill ${old}`); process.exit(1); }
   fs.writeFileSync(PID_FILE, String(process.pid));
-  const cleanup = () => { try { fs.unlinkSync(PID_FILE); } catch { /* sudah hilang */ } };
+  const cleanup = () => { try { fs.unlinkSync(PID_FILE); } catch { /* already gone */ } };
   process.on('exit', cleanup);
 
   for (const net of Object.values(nets)) {

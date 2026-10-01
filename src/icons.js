@@ -178,7 +178,7 @@ class Icons {
           const u = p.info?.imageUrl;
           if (short.includes(a) && !url.has(a) && /^https:\/\//.test(u || '')) url.set(a, u);
         }
-      } catch { /* cadangan saja — GeckoTerminal sudah menjawab */ }
+      } catch { /* fallback only: GeckoTerminal already answered */ }
     }
     for (const a of batch) {
       const prev = this.row(a);

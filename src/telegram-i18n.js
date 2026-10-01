@@ -5,15 +5,15 @@ const ID = require('./locales/telegram.id.json');
 const { formatNote } = require('./message-copy.mjs');
 const localeContext = new AsyncLocalStorage();
 const locale = () => localeContext.getStore() || 'id';
-// Bentuk jamak bahasa Inggris. Bahasa Indonesia tidak menjamakkan kata benda, jadi
-// satu kunci sumber cukup; terjemahan Inggrisnya boleh menulis dua bentuk yang
-// dipisah "|" — "{0} position|{0} positions" — dan diawali "#n|" kalau pencacahnya
-// bukan {0}. Tanpa ini kartu menulis "1 positions", yang kecil tapi langsung terbaca
-// sebagai buatan mesin.
+// English plural forms. Indonesian does not pluralize nouns, so one source key is
+// enough; its English translation may write two forms separated by "|"
+// ("{0} position|{0} positions"), prefixed with "#n|" when the counter is not {0}.
+// Without this a card prints "1 positions", which is small but reads at once as
+// machine-made.
 //
-// Bentuk tunggal dipakai hanya kalau nilai yang DICETAK persis "1": pencacahnya
-// sering sudah diformat ("1.500"/"1,500"), dan menebak angka dari teks berformat
-// lokal justru sumber salah baca.
+// The singular form is used only when the PRINTED value is exactly "1": the counter
+// is often already formatted ("1.500"/"1,500"), and guessing a number from
+// locale-formatted text is a source of misreads.
 function plural(text, values) {
   if (!text.includes('|')) return text;
   let slot = 0, body = text;

@@ -58,13 +58,13 @@ export default function PnlCalendar({ daily, counts, empty = 'Belum ada posisi t
           ${k === today ? 'ring-1 ring-foreground/40' : ''}`}>
         <span className="flex items-center justify-between text-[0.6875rem] text-muted">
           <span className={k === today ? 'font-semibold text-foreground' : ''}>{d}</span>
-          {/* di HP sel terlalu sempit untuk angka + jumlah posisi; jumlahnya ada di tooltip */}
+          {/* on mobile the cell is too narrow for the number + position count; the count is in the tooltip */}
           {n > 1 && <span className="num hidden sm:inline">×{n}</span>}
         </span>
         {v != null && <span className={`num truncate text-[0.6875rem] font-semibold ${tone(v)}`}>
-          {/* PnL kita sendiri: kUsd sengaja tidak ikut sensor, jadi ditutup di sini */}
+          {/* our own PnL: kUsd is deliberately not censored, so it is covered here */}
           <span className="hidden sm:inline">{isHidden() ? usd(v) : kUsd(v)}</span>
-          {/* HP: dibulatkan tanpa sen supaya muat di sel ±45px */}
+          {/* mobile: rounded without cents so it fits the ~45px cell */}
           <span className="sm:hidden">{Math.abs(v) >= 10 ? usd(v, 0) : usd(v, 1)}</span>
         </span>}
       </div>,

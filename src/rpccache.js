@@ -215,7 +215,7 @@ class RpcCache {
     try {
       const r = this.store.get('SELECT COUNT(*) n, COALESCE(SUM(bytes),0) b FROM rpc_cache WHERE chain=?', this.chain);
       n = Number(r?.n || 0); bytes = Number(r?.b || 0);
-    } catch { /* tabelnya belum ada — tampilkan nol */ }
+    } catch { /* the table does not exist yet: show zero */ }
     const asked = this.hits + this.misses;
     return {
       rows: n, bytes, mem: this.mem.size, memBytes: this.memBytes,

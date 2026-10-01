@@ -309,7 +309,7 @@ export default function PositionHistory({ id, onClose }) {
             </Drawer.Body>
             {p && (
               <Drawer.Footer className="mt-4 flex-wrap justify-between gap-2">
-                <span className="text-xs text-muted">{t('Jumlah token dan nilai dicatat bot saat transaksi; harga swap dari Kyber.')}</span>
+                <span className="text-xs text-muted">{t('Jumlah token dan nilai dicatat bot saat transaksi; harga swap dari agregator.')}</span>
                 <Button size="sm" variant="outline" onPress={() => { onClose(); location.hash = '#positions/' + p.id; }}>
                   <ChartCandlestick className="size-4" />{t('Halaman detail & grafik')}</Button>
               </Drawer.Footer>

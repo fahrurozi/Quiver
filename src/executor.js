@@ -121,7 +121,7 @@ class Executor {
   async gasReserve() {
     try {
       if (!(this.lastFees && Date.now() - this.lastFees.ts < 30_000)) await this.gasFees();
-    } catch { /* harga gas tidak terbaca: pakai yang terakhir diketahui / cadangan tetap */ }
+    } catch { /* gas price unreadable: use the last known one / the fixed fallback */ }
     return this.gasReserveCached();
   }
 
@@ -318,7 +318,7 @@ class Executor {
       let d = {};
       try { d = JSON.parse(row.detail || '{}') || {}; } catch { d = {}; }
       this.store.run('UPDATE txs SET detail=? WHERE hash=?', JSON.stringify({ ...d, ...patch }), hash);
-    } catch { /* catatan tambahan tidak boleh menggagalkan transaksi */ }
+    } catch { /* an extra note must not fail the transaction */ }
   }
 
   // ---- token allowances ---------------------------------------------------

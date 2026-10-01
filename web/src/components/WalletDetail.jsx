@@ -160,8 +160,8 @@ const posCols = (open) => [
     <div className={tone(p.pnl_q)}>
       {usd(p.pnl_q)}
       <div className="text-xs">{p.pnlPct == null ? '' : pct(p.pnlPct, 2)}</div>
-      {/* Posisi tertutup yang tokennya belum dijual: PnL-nya masih ikut harga. Tunjukkan
-          berapa yang sudah jadi uang dan berapa yang masih berupa token. */}
+      {/* Closed positions whose token is not sold yet: PnL still follows the price. Show
+          how much has become cash and how much is still a token. */}
       {!open && p.heldTok > 0 && (
         <div className="whitespace-nowrap text-xs text-muted" title={tt('Hasil tutup posisi yang sudah ditukar jadi USDG/ETH = terealisasi; token yang masih dipegang dinilai harga pool sekarang.')}>
           {tt('terealisasi {r} · {t} dipegang', { r: usd(p.realizedPnl), t: usd(p.heldUnrealized) })}
@@ -385,8 +385,8 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
               <Panel title="Riwayat profit harian" className="lg:col-span-3"><PnlCalendar daily={data.daily} /></Panel>
             </div>
 
-            {/* Klik baris -> laci kejadian on-chain posisi itu, sama seperti tabel
-                posisi bot. Kejadiannya sudah tersimpan sejak pindai, jadi gratis. */}
+            {/* Click a row -> drawer of that position's on-chain events, same as the bot's
+                position table. The events are stored since the scan, so it is free. */}
             <Panel title={t('Posisi berjalan ({n})', { n: data.open.length })} className="mb-4" bodyClass="p-0"
               action={<Totals rows={data.open} />}>
               <DataTable label="Posisi berjalan" rows={data.open} rowKey={(p) => p.token_id} columns={posCols(true)}
@@ -395,8 +395,8 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
                 footer={<TotalRow rows={data.open} open />} />
             </Panel>
             <Panel title={t('Riwayat posisi ({n})', { n: data.closed.length })} bodyClass="p-0">
-              {/* Pembagian halaman menggantikan tombol "tampilkan semua": 145 baris
-                  sekaligus membuat halaman panjang dan sulit dibaca. */}
+              {/* Pagination replaces the "show all" button: 145 rows at once make the page
+                  long and hard to read. */}
               <DataTable label="Riwayat posisi" rows={data.closed} rowKey={(p) => p.token_id} columns={posCols(false)}
                 searchable pageSize={20} defaultSort={{ column: 'when', direction: 'descending' }} onRow={(p) => setHistId(p.token_id)}
                 empty={<Empty title="Belum ada posisi tertutup" />}

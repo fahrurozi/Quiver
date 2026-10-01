@@ -976,7 +976,7 @@ function BackupTab({ d }) {
     const t0 = Date.now();
     await new Promise((res) => setTimeout(res, 5000));
     while (Date.now() - t0 < 4 * 60_000) {
-      try { const x = await get('/api/settings'); if (x && !x.error) { location.reload(); return; } } catch { /* masih mati */ }
+      try { const x = await get('/api/settings'); if (x && !x.error) { location.reload(); return; } } catch { /* still down */ }
       await new Promise((res) => setTimeout(res, 2500));
     }
     setRestarting(false);

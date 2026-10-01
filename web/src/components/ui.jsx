@@ -37,9 +37,9 @@ export function Stat({ label, value, sub, fx = null, valueClass = '', badge = nu
         {badge}
       </div>
       <div className={`num break-words text-lg sm:text-[1.375rem] leading-tight font-semibold tracking-tight ${valueClass}`}>{value}<Fx v={fx} /></div>
-      {/* Di HP ubinnya selebar setengah layar: keterangan yang dipotong satu baris
-          ("$851,40 di luar rentang — ti…") membuang justru bagian yang menjelaskan.
-          Dua baris; tinggi kartu tetap rata karena semuanya satu baris kisi. */}
+      {/* On mobile the tile is half the screen wide: a caption cut to one line
+          ("$851,40 out of range — ti…") drops exactly the part that explains it.
+          Two lines; the card height stays even because everything shares one grid row. */}
       {sub && <div className="line-clamp-2 text-xs text-muted">{typeof sub === 'string' ? t(sub) : sub}</div>}
     </Card>
   );
@@ -127,7 +127,7 @@ export function Panel({ title, desc, action, children, className = '', bodyClass
             {title && <h2 className="text-sm font-semibold tracking-tight">{t(title)}</h2>}
             {desc && <p className="mt-0.5 text-xs text-muted">{t(desc)}</p>}
           </div>
-          {/* max-w-full: di HP isi action (mis. dua Segmented) boleh membungkus, bukan menjebol kartu */}
+          {/* max-w-full: on mobile the action content (e.g. two Segmented) may wrap instead of breaking out of the card */}
           {action && <div className="max-w-full shrink-0">{action}</div>}
         </div>
       )}
@@ -289,7 +289,7 @@ export function PriceRange({
     return (
       <div className="w-44 min-w-40 text-xs">
         <div className="font-medium">{t('Seluruh rentang')}</div>
-        {/* tanpa tepi: pita memudar ke kedua sisi, bukan berhenti di satu harga */}
+        {/* no edge: the band fades on both sides instead of stopping at one price */}
         <div className="relative mt-0.5 h-3.5">
           <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-linear-to-r from-transparent via-accent/40 to-transparent" />
         </div>
@@ -360,9 +360,9 @@ export function PriceRange({
           {quote && <span className="ml-1 text-muted">{quote}</span>}
         </div>
       )}
-      {/* Jalur tipis = seluruh sumbu; pita tebal bertepi = rentang posisi, diwarnai
-          statusnya supaya in/out terbaca sebelum teksnya. Penanda dipusatkan pada
-          harganya (-translate-x-1/2), bukan menempel dengan tepi kirinya. */}
+      {/* Thin track = the whole axis; thick edged band = the position range, coloured by
+          its status so in/out reads before the text. The marker is centred on its price
+          (-translate-x-1/2), not attached by its left edge. */}
       <div className="relative h-3.5">
         <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-default" />
         <div className={`absolute top-1/2 h-2 -translate-y-1/2 rounded-[1px] border-x-2 ${band}`}
@@ -377,8 +377,8 @@ export function PriceRange({
           {t('masuk {p}', { p: price(pEntry) })}
           {move != null && <>
             <span className="mx-1 text-muted">·</span>
-            {/* pool yang disapu kosong bisa menaruh harga di tick maksimum — +1e19% tidak
-                memberi tahu apa-apa selain "jauh"; dibatasi seperti jarak ke tepi */}
+            {/* a swept-empty pool can put the price at the max tick — +1e19% says nothing
+                beyond "far"; capped like the distance to the edge */}
             <span className={move > 0.05 ? 'text-success' : move < -0.05 ? 'text-danger' : ''}>
               {closed ? t('keluar ') : ''}{move >= 1000 ? '+999+%' : pct(move, 1)}</span>
           </>}
@@ -507,9 +507,9 @@ export function DataTable({
       )}
       <Table variant="secondary">
         <Table.ScrollContainer className="max-w-full">
-          {/* onRow: seluruh baris bisa diklik (mis. membuka laci riwayat). Tombol dan
-              tautan di dalam sel tetap bekerja sendiri — react-aria menghentikan
-              tekanan bersarang sebelum sampai ke baris. */}
+          {/* onRow: the whole row is clickable (e.g. opens the history drawer). Buttons and
+              links inside a cell still work on their own — react-aria stops nested
+              presses before they reach the row. */}
           <Table.Content aria-label={t(label)} className="min-w-[640px]"
             sortDescriptor={sort || undefined} onSortChange={setSort}
             onRowAction={onRow ? (key) => { const r = rows.find((x, i) => String(rowKey ? rowKey(x, i) : i) === String(key)); if (r) onRow(r); } : undefined}>
@@ -550,8 +550,8 @@ export function DataTable({
       {footer && rows.length > 0 && (
         <div className="border-t border-border px-4 py-2.5 text-sm">{footer}</div>
       )}
-      {/* Kaki tabel tampil begitu daftarnya lebih panjang dari pilihan terkecil, supaya
-          jumlah baris tetap bisa dikecilkan meski semuanya sedang muat di satu halaman. */}
+      {/* The table footer shows as soon as the list is longer than the smallest option, so
+          the row count can still be reduced even when everything fits on one page. */}
       {size > 0 && sorted.length > sizes[0] && (
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border px-4 py-3">
           <span className="flex items-center gap-2 text-xs text-muted">
@@ -610,8 +610,8 @@ export function Text({ label, value, onChange, placeholder, hint, type = 'text',
   return (
     <TextField value={value ?? ''} onChange={onChange} type={type} isInvalid={isInvalid} isDisabled={isDisabled} aria-label={aria ? t(aria) : undefined} className={`flex flex-col gap-1 ${className}`}>
       {label && <Label>{t(label)}</Label>}
-      {/* variant="secondary": varian HeroUI untuk field di dalam Card/Surface. Varian bawaan
-          (primary) berwarna sama persis dengan kartu dan tanpa garis tepi — tidak terlihat. */}
+      {/* variant="secondary": the HeroUI variant for fields inside a Card/Surface. The default
+          (primary) is exactly the card's colour and has no border — invisible. */}
       <Input step={type === 'number' ? (step ?? 'any') : undefined} variant="secondary" placeholder={placeholder && t(placeholder)} autoComplete={autoComplete} className={mono ? 'mono' : type === 'number' ? 'num' : ''} />
       {isInvalid && error ? <Description className="text-danger">{t(error)}</Description> : hint && <Description>{t(hint)}</Description>}
     </TextField>

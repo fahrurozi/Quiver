@@ -146,7 +146,7 @@ const queue = (e) => e.leftovers().map((x) => x.token);
     const d = world({ saldo: { [NOT_A_ROUTE]: 8n * E18 }, harga: {} });
     const r = await d.e.sweepWallet();
     assert.deepEqual(queue(d.e), []);
-    assert.equal(r.skipped[0].why, 'Kyber tidak menemukan rute');
+    assert.equal(r.skipped[0].why, 'Tidak ada agregator yang menemukan rute');
   });
 
   await t('sweeping does NOT send any transaction', async () => {

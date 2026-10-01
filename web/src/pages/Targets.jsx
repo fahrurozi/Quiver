@@ -177,8 +177,8 @@ function TargetRow({ tg, enabled, onToggle, onChanged }) {
         <Switch isSelected={enabled} onChange={(on) => onToggle(tg, on)} aria-label={t('Aktifkan target')} size="sm">
           <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content>
         </Switch>
-        {/* Nama bisa diklik: membuka PnL, posisi, dan riwayat wallet ini. Tombol ke
-            situs luar berdiri di luar tautan itu — tautan tidak boleh bersarang. */}
+        {/* The name is clickable: opens this wallet's PnL, positions and history. The button to
+            the outside site stands outside that link — links must not nest. */}
         <div className="min-w-0">
           <a href={href} className="group block min-w-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent">
             <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ function TargetRow({ tg, enabled, onToggle, onChanged }) {
           <a href={href} aria-label={t('Buka detail')} className="flex size-8 items-center justify-center rounded-md text-muted hover:bg-default hover:text-foreground">
             <ChevronRight className="size-4" /></a>
         </div>
-        {/* HP: ringkasan dalam satu baris di bawah nama */}
+        {/* mobile: summary on one line under the name */}
         <div className="col-span-3 flex flex-wrap gap-x-4 gap-y-1 pl-12 text-xs text-muted md:hidden">
           {balKnown(tg.balance) && <span className={`num font-medium ${balTone(tg.balance)}`}>{t('saldo {v}', { v: kUsd(balTotal(tg.balance)) })}</span>}
           {tg.research && <span className={`num font-medium ${tone(tg.research.totalProfitUsd)}`}>{kUsd(tg.research.totalProfitUsd || 0)} PnL</span>}
@@ -297,9 +297,9 @@ function TargetDetail({ address, targets, reload, enabledOf, onToggle }) {
         </div>
       </div>
 
-      {/* aktivitas copy untuk target ini */}
+      {/* copy activity for this target */}
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
-        {/* Uang dia sendiri — kalau tinggal puluhan dolar, mengikutinya sudah tidak ada gunanya. */}
+        {/* Their own money — when only tens of dollars are left, following them is pointless. */}
         <Stat label="Saldo dia" value={balKnown(tg.balance) ? kUsd(balTotal(tg.balance)) : '—'} fx={balKnown(tg.balance) ? balTotal(tg.balance) : null} valueClass={balTone(tg.balance)}
           sub={balKnown(tg.balance)
             ? t('kas {c} · LP {l} ({n} posisi)', { c: money(tg.balance.cashUsd), l: money(tg.balance.lpUsd), n: tg.balance.lpOpenN })
@@ -313,7 +313,7 @@ function TargetDetail({ address, targets, reload, enabledOf, onToggle }) {
 
       {rulesOpen && <Panel title="Aturan wallet ini" className="mb-4"><TargetRules tg={tg} onChanged={reload} /></Panel>}
 
-      {/* apa yang sedang dia pegang di luar posisi LP: kas, hasil tutup yang belum dijual, token yang ditimbun */}
+      {/* what they hold outside LP positions: cash, closed proceeds not yet sold, hoarded tokens */}
       <WalletHoldings address={tg.address} />
 
       <h2 className="mb-3 mt-6 text-base font-semibold tracking-tight">{t('Kinerja LP wallet ini')}</h2>

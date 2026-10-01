@@ -6,6 +6,7 @@
   "description": "Quiver — copy-LP untuk Robinhood Chain: cermin posisi likuiditas Uniswap v3/v4 dari wallet target, dengan dasbor dan bot Telegram",
   "main": "src/index.js",
   "scripts": {
+    "test": "node scripts/run-tests.js",
     "start": "node --no-warnings src/index.js",
     "setup": "node --no-warnings src/index.js setup",
     "scout": "node --no-warnings src/scout.js",

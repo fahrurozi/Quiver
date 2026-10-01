@@ -351,7 +351,7 @@ class Watcher {
           // Do not store it: a zero poolKey makes the action look like a 0x0/0x0 pool.
           if (/^0x0+$/.test(pk.currency1) && pk.fee === 0) return;
           this.v4Info.set(id, { poolKey: pk, poolId: computePoolId(d[0]) });
-        } catch { /* tidak terbaca: diisi jalur cadangan di bawah */ }
+        } catch { /* unreadable: filled by the fallback path below */ }
       });
     }
     // Fallback for an NFT that was already burned when read — a target that opens-closes fast,

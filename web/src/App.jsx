@@ -104,7 +104,7 @@ function ModeBadge({ m }) {
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${mo[2]}`}>
       <span className="relative flex size-2">
-        {/* denyut hanya saat LIVE: satu-satunya keadaan yang memindahkan uang */}
+        {/* pulse only when LIVE: the one state that moves money */}
         {!m.paused && !m.dry_run && <span className={`absolute inline-flex size-full animate-ping rounded-full opacity-50 ${mo[1]}`} />}
         <span className={`relative inline-flex size-2 rounded-full ${mo[1]}`} />
       </span>
@@ -146,19 +146,19 @@ function StatusFoot({ status, reload, theme, toggleTheme, privacy }) {
         </div>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <span className="text-xs text-muted">{t('Wallet')}</span>
-          {/* Wallet bot sendiri juga bisa dibuka di luar — memeriksa saldo & tx-nya
-              tanpa menyalin alamatnya dulu. */}
+          {/* The bot's own wallet can also be opened externally — check its balance & txs
+              without copying the address first. */}
           <span className="flex items-center gap-1">
             <span className="mono text-xs whitespace-nowrap text-muted">{m?.wallet ? short(m.wallet) : t('belum ada')}</span>
             {m?.wallet && <WalletLinks address={m.wallet} compact className="trade-snug" />}
           </span>
         </div>
       </div>
-      {/* Jeda/lanjut satu-satunya aksi yang mengubah bot — berdiri sendiri, selebar sidebar. */}
+      {/* Pause/resume is the only action that changes the bot — standalone, as wide as the sidebar. */}
       <Button size="sm" variant="outline" className="w-full" onPress={pause} isDisabled={!m}>
         {m?.paused ? <><Play className="size-3.5" />{t('Lanjutkan')}</> : <><Pause className="size-3.5" />{t('Jeda')}</>}
       </Button>
-      {/* Baris alat: ikon tanpa bingkai di kiri, pemilih bahasa di kanan — mengikuti gaya header HP. */}
+      {/* Tool row: frameless icons on the left, language picker on the right — follows the mobile header style. */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-0.5">
           <Button size="sm" variant="ghost" isIconOnly aria-label={t('Ganti tema')} onPress={toggleTheme}>
@@ -166,14 +166,14 @@ function StatusFoot({ status, reload, theme, toggleTheme, privacy }) {
           </Button>
           <PrivacyButton hidden={privacy[0]} toggle={privacy[1]} />
           <AlertBell placement="top" variant="ghost" iconClass="size-4" />
-          {/* Hanya saat gerbang token menyala; tanpa token tidak ada sesi yang bisa ditutup. */}
+          {/* Only when the token gate is on; without a token there is no session to close. */}
           {m?.auth && (
             <Button size="sm" variant="ghost" isIconOnly aria-label={t('Keluar dari dasbor')} onPress={logout}>
               <LogOut className="size-4" />
             </Button>
           )}
         </div>
-        {/* Pemilih bahasa: dua pilihan saja, jadi cukup kontrol bersegmen. */}
+        {/* Language picker: only two choices, so a segmented control is enough. */}
         <div className="flex h-8 items-center rounded-md bg-default/60 p-0.5" role="group" aria-label={t('Bahasa')}>
           {Object.entries(LOCALES).map(([k, name]) => (
             <button key={k} onClick={() => setLocale(k)} type="button" title={name} aria-pressed={locale === k}
@@ -235,7 +235,7 @@ function ChainSwitcher({ chain }) {
                     <span className="truncate text-[0.6875rem] opacity-80">
                       {mode} · {c.targets} {t('target')}{c.verified ? '' : ` · ${t('alamat belum diverifikasi')}`}
                     </span>
-                    {/* Saldo wallet di chain ini: kas dalam USD + native. Belum terbaca (mesin baru hidup / tanpa wallet) = strip. */}
+                    {/* Wallet balance on this chain: cash in USD + native. Not read yet (engine just started / no wallet) = dash. */}
                     <span className="truncate text-[0.6875rem] opacity-80" title={c.cash ? `${num(c.cash.stable, 2)} ${c.stableSymbol} · ${num(c.cash.native, 4)} ${c.nativeSymbol}` : undefined}>
                       {c.cash ? `${usd(c.cash.usd)} · ${num(c.cash.native, 4)} ${c.nativeSymbol}` : `— ${c.nativeSymbol}`}
                     </span>
@@ -297,7 +297,7 @@ export default function App() {
 
   return (
     <StatusCtx.Provider value={{ status, reload }}>
-      {/* Toast di atas: peringatan target tidak ketiban baris tabel paling bawah. */}
+      {/* Toast on top: a target warning must not be covered by the bottom table row. */}
       <Toast.Provider placement="top" />
       <ConfirmHost />
       <SearchModal />

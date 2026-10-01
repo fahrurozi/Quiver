@@ -62,7 +62,7 @@ const rules = [
   [/^kurangi posisi #(\d+)(.*)$/s, 'Reduced liquidity in position #{1}{2}', 'Mengurangi likuiditas posisi #{1}{2}'],
   [/^jual sisa #(\d+): (.+)$/s, 'Leftover sale for position #{1}: {2}', 'Penjualan sisa posisi #{1}: {2}'],
   [/^(.+?) belum terjual: (.+)$/s, '{1} remains unsold: {2}', '{1} belum terjual: {2}'],
-  [/^rute Kyber rugi ([\d.,]+)% \(batas ([\d.,]+)%\)(.*)$/s, 'Kyber route loss is {1}% (limit {2}%){3}', 'Kerugian rute Kyber {1}% (batas {2}%){3}'],
+  [/^rute (?:Kyber|agregator) rugi ([\d.,]+)% \(batas ([\d.,]+)%\)(.*)$/s, 'Route loss is {1}% (limit {2}%){3}', 'Kerugian rute {1}% (batas {2}%){3}'],
   [/^dipotong oleh (.+?) \((\$[\d.,]+)\)(.*)$/s, 'Position size capped by the {1} ({2}){3}', 'Ukuran posisi dibatasi oleh {1} ({2}){3}'],
   // Size note from policy.js: "<mode> → $200.00". The mode is a term from the rules
   // file, not a sentence — and this line is the one read most often in Activity,

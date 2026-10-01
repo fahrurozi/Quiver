@@ -136,7 +136,7 @@ export function ShareDialog({ card, onClose }) {
               <Modal.Heading>{t('Bagikan')}</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
-              {/* Pratinjau mengikuti rasio ukuran yang dipilih; story dibatasi tingginya supaya dialog tidak menjulang. */}
+              {/* The preview follows the chosen size ratio; the story is capped in height so the dialog does not tower. */}
               <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-[#0E1015]">
                 <div className={`relative w-full transition-opacity ${loading ? 'opacity-60' : ''}`} style={{ aspectRatio: ratio, maxHeight: '60vh' }}>
                   {url

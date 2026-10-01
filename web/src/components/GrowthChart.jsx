@@ -219,7 +219,7 @@ export default function GrowthChart({ p, view, dim = false }) {
                 </linearGradient>
               )}
             </defs>
-            {/* garis bantu: garis rambut utuh, bukan putus-putus — tidak dibaca sebagai ambang */}
+            {/* guide line: a solid hairline, not dashed — so it is not read as a threshold */}
             <CartesianGrid stroke="var(--border)" strokeOpacity={0.6} vertical={false} syncWithTicks />
             <XAxis dataKey="t" type="number" scale="time" domain={[t0, t1]} ticks={X.ticks} tickFormatter={tickFmt}
               tickLine={false} axisLine={false} minTickGap={16} tickMargin={8} padding={{ left: 4, right: 4 }}

@@ -59,9 +59,9 @@ export default function AutoCompoundButton({ p, reload, disabled = false, compac
   </label>;
   const modeLabel = on ? (modeNow === 'claim' ? t('KLAIM') : t('COMPOUND')) : 'OFF';
   return <>
-    {/* Di baris tabel tombolnya menyusut jadi lambang: empat tombol berlabel penuh per
-        baris melebarkan kolom aksi melewati layar dan membuat tabel terbaca seperti
-        formulir. Statusnya tetap terlihat — titik hijau di sudut saat panen menyala. */}
+    {/* In a table row the button shrinks to an icon: four fully labelled buttons per
+        row stretch the action column past the screen and make the table read like a
+        form. The status stays visible — a green dot in the corner while harvesting is on. */}
     {compact ? (
       <Button size="sm" variant="tertiary" isIconOnly className="relative" isDisabled={disabled || p.empty} onPress={show}
         aria-label={`${t('Panen fee otomatis')} · ${modeLabel}`} title={`${t('Panen fee otomatis')} · ${modeLabel}`}>

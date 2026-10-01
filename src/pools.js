@@ -248,7 +248,7 @@ Chain.prototype.findEthUsdgPools = async function findEthUsdgPools(headBlock, bl
         topics: [TOPIC.initializeV4, null, pad(this.ADDR.native), pad(this.ADDR.usdg)],
         fromBlock: '0x' + lo.toString(16), toBlock: '0x' + hi.toString(16),
       });
-    } catch { /* rentang terlalu besar: lewati potongan ini */ }
+    } catch { /* range too large: skip this chunk */ }
     for (const l of logs) {
       const b = ethers.getBytes(l.data);
       const w = (i) => BigInt(ethers.hexlify(b.slice(i * 32, i * 32 + 32)));
@@ -629,7 +629,7 @@ Chain.prototype.markSqrtForPair = async function markSqrtForPair(token0, token1,
       try {
         const d = IF_POOL3.decodeFunctionResult('slot0', w);
         consider(r, { sqrtPriceX96: BigInt(d[0]), tick: Number(d[1]) }, BigInt(wl));
-      } catch { /* pool tidak terbaca: lewati */ }
+      } catch { /* pool unreadable: skip */ }
     });
     val = best ? best.val : null;
   } catch (e) {

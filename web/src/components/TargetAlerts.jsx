@@ -23,7 +23,7 @@ let prefs = load();
 const subs = new Set();
 export function setAlertPrefs(patch) {
   prefs = { ...prefs, ...patch };
-  try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* mode privat: cukup di memori */ }
+  try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* private mode: memory alone is enough */ }
   subs.forEach((f) => f());
 }
 export const useAlertPrefs = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => prefs);
@@ -259,7 +259,7 @@ export function useTargetAlerts() {
         if (!first && r.items?.length) announce(r.items, prefs);
         last.current = Math.max(last.current ?? 0, r.lastId ?? 0);
         lastClosed.current = Math.max(lastClosed.current, r.lastClosed ?? 0, ...(r.items || []).map((it) => (it.kind === 'close' ? it.ts : 0)));
-      } catch { /* jaringan putus: coba lagi di putaran berikutnya */ }
+      } catch { /* network down: retry on the next round */ }
       finally { if (alive) timer = setTimeout(tick, document.hidden ? 8000 : 4000); }
     };
     tick();

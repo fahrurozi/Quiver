@@ -225,18 +225,18 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
 
   return (
     <article className={`flex min-w-0 flex-col rounded-lg border border-border border-l-[3px] bg-surface ${EDGE_CLS[g.risk.level]}`} aria-label={`${p0.symbol0}/${p0.symbol1}`}>
-      {/* kepala: pasangan & pool di kiri, status posisi terpilih di kanan */}
+      {/* header: pair & pool on the left, selected position status on the right */}
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 px-4 pt-3 pb-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <TokenPair token0={p0.token0} token1={p0.token1} symbol0={p0.symbol0} symbol1={p0.symbol1} size={dense ? 22 : 26} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <PairName token0={p0.token0} token1={p0.token1} symbol0={p0.symbol0} symbol1={p0.symbol1} pool={p0.pool_ref} sep="/" className="text-sm font-semibold" />
-              {/* Keamanan token menurut GMGN — perisai kecil, keterangannya saat disentuh. */}
+              {/* Token safety per GMGN — a small shield, its caption on touch. */}
               <GmgnDot token={baseTokenOf(p0)} />
               <a href={'#positions/' + p.id} className="text-muted hover:text-foreground" title={t('Buka detail posisi {tag}', { tag: sel.tag })} aria-label={t('Buka detail posisi {tag}', { tag: sel.tag })}><ArrowUpRight className="size-3.5" /></a>
-              {/* Tumpukan logo: GMGN / Based / fomo / Uniswap, lalu DexScreener / GeckoTerminal —
-                  satu klik dari kartu ke terminal luar untuk token & pool ini. */}
+              {/* Logo stack: GMGN / Based / fomo / Uniswap, then DexScreener / GeckoTerminal —
+                  one click from the card to an outside terminal for this token & pool. */}
               <TradeLinks token={baseTokenOf(p0)} pool={p0.pool_ref} compact className="ml-2" />
               <DataLinks pool={p0.pool_ref} dexUrl={g.pair?.url} className="ml-1.5" compact />
             </div>
@@ -258,18 +258,18 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
         </div>
       </div>
 
-      {/* Total pool: PnL gabungan dibuat besar — inilah angka yang dilihat pertama
-          saat memutuskan bertahan atau tidak di pool ini, sebelum turun ke posisi satu
-          per satu. Tampil juga untuk pool berposisi tunggal supaya semua kartu punya
-          angka besar di tempat yang sama. */}
+      {/* Pool total: the combined PnL is made big — it is the number seen first when
+          deciding whether to stay in this pool, before going down to the positions one by
+          one. Shown for single-position pools too so every card has a big number in
+          the same place. */}
       <div className="mx-4 mb-2 flex flex-wrap items-center justify-between gap-x-5 gap-y-1.5 rounded-md bg-default/50 px-3 py-2">
         <div>
           <div className="text-[0.6875rem] text-muted">{t('PnL seluruh pool')} · {t('{n} posisi', { n: g.items.length })}</div>
           <div className={`num text-xl leading-tight font-semibold tracking-tight ${tone(gPnl)}`}>
             {usd(gPnl)}{gCost > 0 && <span className="ml-1.5 text-sm font-medium">({pct((gPnl / gCost) * 100, 2)})</span>}
           </div>
-          {/* Sejak awal: posisi terbuka + semua yang pernah ditutup di pool ini. Pool
-              yang tampak untung sekarang bisa saja sudah beberapa kali merugikan. */}
+          {/* Since the start: the open position + everything ever closed in this pool. A pool
+              that looks profitable now may have lost money several times. */}
           {h && h.closedCount > 0 && (
             <div className="num mt-0.5 text-[0.6875rem] text-muted">
               {t('sejak awal')} <span className={`font-semibold ${tone(gPnl + h.realizedUsd)}`}>{usd(gPnl + h.realizedUsd)}</span>
@@ -289,10 +289,10 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
           </div>
         </dl>
       </div>
-      {/* legenda posisi (hanya kalau lebih dari satu) */}
+      {/* position legend (only when there is more than one) */}
       {many && <div className="px-4 pb-2"><PositionChips items={g.items} selId={p.id} onPick={setPick} /></div>}
 
-      {/* harga kini + rentang posisi terpilih, lalu grafik */}
+      {/* current price + selected position range, then the chart */}
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 px-4 pb-1">
         <div className="num text-lg leading-tight font-semibold tracking-tight">
           {price(pNow)}{quote && <span className="ml-1 text-xs font-medium text-muted">{quote}</span>}
@@ -308,7 +308,7 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
         <CardChart g={g} sel={sel} onPick={setPick} tf={tf} live={g.live} delay={delay} height={dense ? 170 : 250} />
       </div>
 
-      {/* posisi terpilih: sumber & umur (kalau banyak), pita rentang linear, angka kunci */}
+      {/* selected position: source & age (when many), linear range band, key numbers */}
       <div className="px-4 pt-2 pb-3">
         {many && <div className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.6875rem] text-muted">
           <span className="mono font-medium text-foreground">{sel.tag}</span><span>·</span>
@@ -328,7 +328,7 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
         </div>
       </div>
 
-      {/* pemicu keluar otomatis posisi terpilih */}
+      {/* automatic exit triggers of the selected position */}
       <div className="border-t border-border px-4 py-3">
         <div className="mb-2 flex items-center justify-between text-[0.6875rem]">
           <span className="font-medium">{t('Pemicu keluar otomatis')}{many && <span className="mono ml-1.5 font-medium text-muted">{sel.tag}</span>}</span>
@@ -340,7 +340,7 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
           : <div className={`grid gap-x-4 gap-y-2.5 ${dense ? 'sm:grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'}`}>{sel.trig.map((x) => <TriggerBar key={x.key} x={x} />)}</div>}
       </div>
 
-      {/* pasar + aksi untuk posisi terpilih */}
+      {/* market + actions for the selected position */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border px-4 py-2.5">
         <MarketStrip pair={g.pair} />
         {!p.empty && (
@@ -349,7 +349,7 @@ function MonitorCard({ g, tf, dense, delay, actions }) {
             <TakeoverButton p={p} reload={reload} disabled={busy} />
             <Button size="sm" variant="secondary" isPending={claiming === p.id} isDisabled={busy} onPress={() => claim(p)}>{t('Claim fee')}{many && <span className="mono ml-1 opacity-70">{sel.tag}</span>}</Button>
             <Button size="sm" variant="danger-soft" isPending={closing === p.id} isDisabled={busy} onPress={() => close(p)}>{t('Tutup')}{many && <span className="mono ml-1 opacity-70">{sel.tag}</span>}</Button>
-            {/* Tutup semua posisi di pool ini: satu konfirmasi, ditutup berurutan. */}
+            {/* Close every position in this pool: one confirmation, closed in sequence. */}
             {many && <Button size="sm" variant="danger" isPending={closing != null && closing !== p.id} isDisabled={busy}
               onPress={() => closeAll(g.items.filter((x) => !x.p.empty).map((x) => x.p), { pair: pairName })}>
               {t('Tutup semua')} <span className="num ml-1 opacity-80">({g.items.length})</span>
@@ -512,7 +512,7 @@ export default function Monitor() {
     <GmgnProvider tokens={open.map((p) => baseTokenOf(p))}>
       {header}
       {error && <div className="mb-4"><Notice status="warning" title="Gagal memperbarui daftar posisi">{error} — {t('data di bawah dari pembaruan terakhir.')}</Notice></div>}
-      {/* pita ringkasan: angka yang dicari sebelum membaca kartu satu per satu */}
+      {/* summary band: the numbers looked for before reading the cards one by one */}
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-xs">
         <span className="inline-flex items-center gap-1.5 font-medium"><Activity className="size-3.5 text-muted" />{t('{n} posisi terbuka', { n: open.length })}{groups.length !== open.length && <span className="font-normal text-muted">· {t('{n} pool', { n: groups.length })}</span>}</span>
         <span><Dot tone="success" /> <span className="num">{inN}</span> {t('in-range')}</span>

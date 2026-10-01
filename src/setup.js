@@ -339,7 +339,7 @@ async function applyRestore({ root, cfgPath, envPath, backup: raw, parts = {}, p
   if (w) {
     const kp = keyPathOf(cfg);
     let same = false;
-    try { same = new ethers.Wallet(fs.readFileSync(kp, 'utf8').trim()).address === w.address; } catch { /* belum ada / bukan kunci */ }
+    try { same = new ethers.Wallet(fs.readFileSync(kp, 'utf8').trim()).address === w.address; } catch { /* missing / not a key */ }
     const bak = same ? null : writeKeyFile(kp, w.privateKey);
     wallet = { address: w.address.toLowerCase(), keyFile: kp, backup: bak };
     log(`pemulihan: wallet ${wallet.address}${same ? ' (berkas kunci sudah sama)' : ' ditulis'}${bak ? ` — kunci lama dicadangkan: ${path.basename(bak)}` : ''}`);
@@ -405,7 +405,7 @@ function runSetup({ root, cfgPath, envPath, requested = false, log = console.log
   try {
     fs.mkdirSync(path.dirname(codeFile), { recursive: true });
     fs.writeFileSync(codeFile, code + '\n', { mode: 0o600 });
-  } catch { /* boleh gagal: kodenya tetap tercetak di terminal */ }
+  } catch { /* may fail: the code is still printed in the terminal */ }
 
   const hits = new Map();
   const blocked = (ip) => { const e = hits.get(ip); return !!e && e.until > Date.now() && e.n >= 10; };
@@ -501,7 +501,7 @@ function runSetup({ root, cfgPath, envPath, requested = false, log = console.log
       setTimeout(() => {
         server.closeAllConnections?.();
         server.close(() => {
-          try { fs.unlinkSync(codeFile); } catch { /* sudah hilang */ }
+          try { fs.unlinkSync(codeFile); } catch { /* already gone */ }
           log('pemasangan selesai — menyalakan Quiver…');
           resolve(finished);
         });

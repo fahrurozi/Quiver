@@ -35,7 +35,7 @@ class Holdings {
   async seenTokens(wallet) {
     const key = `held_seen:${this.chain.network}:${wallet}`;
     let st = { block: 0, ts: 0, tokens: [] };
-    try { st = { ...st, ...JSON.parse(this.store.getState(key, '{}')) }; } catch { /* mulai dari nol */ }
+    try { st = { ...st, ...JSON.parse(this.store.getState(key, '{}')) }; } catch { /* start from zero */ }
     if (st.block && Date.now() - st.ts < RESCAN_MS) return st.tokens;
     try {
       const head = await this.rpc.blockNumber();

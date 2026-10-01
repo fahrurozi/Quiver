@@ -31,15 +31,15 @@ export default function WalletPage({ param }) {
     <>
       <PageHeader group="Riset" title="Wallet"
         desc="PnL, fee, gaya ber-LP, dan seluruh riwayat posisi wallet mana pun — dihitung langsung dari chain. Klik baris posisi untuk melihat tiap kejadian on-chain-nya." />
-      {/* Selebar alamat yang diketik, bukan selebar halaman: kotak isian sepanjang kartu
-          di bawahnya terbaca seperti ruang kosong. */}
+      {/* As wide as the typed address, not the page: a field as long as the card
+          below reads like empty space. */}
       <form className="mb-4 flex max-w-2xl items-start gap-2" onSubmit={(e) => { e.preventDefault(); open(); }}>
         <Text className="min-w-0 flex-1" aria="Alamat wallet" mono placeholder="0x… alamat wallet" value={addr} onChange={setAddr}
           isInvalid={addr !== '' && !valid} error="Alamat harus 0x diikuti 40 karakter hex." />
         <Button type="submit" isDisabled={!valid}><Search className="size-4" />{t('Buka')}</Button>
       </form>
-      {/* Wallet yang sedang dibuka: alamat penuh + tombol ke situs luar, supaya riset
-          di sini bisa langsung diadu dengan DeBank/LPAgent/penjelajah blok. */}
+      {/* The wallet being opened: full address + buttons to outside sites, so research
+          here can be checked right away against DeBank/LPAgent/the block explorer. */}
       {current && (
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="mono break-all text-sm text-muted">{current}</span>

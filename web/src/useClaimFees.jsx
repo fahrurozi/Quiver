@@ -24,7 +24,7 @@ function ClaimBody({ p, initial, onChange }) {
         <Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
           <span className="flex flex-col">
             <span className="text-foreground">{t('Jual {m} dari fee ke {q} sekalian', { m: meme, q: quote })}</span>
-            <span className="text-xs">{t('Dijual lewat Kyber tepat sesudah klaim. {q} dari fee tetap di wallet.', { q: quote })}</span>
+            <span className="text-xs">{t('Dijual lewat agregator tepat sesudah klaim. {q} dari fee tetap di wallet.', { q: quote })}</span>
           </span>
         </Checkbox.Content>
       </Checkbox>

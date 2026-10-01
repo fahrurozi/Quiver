@@ -544,7 +544,7 @@ const EN = {
   'Tidak ada yang ditukar — saldo {a} dan {b} sudah cukup untuk posisi ini.': 'Nothing to swap — your {a} and {b} balances already cover this position.',
   '1:1, tanpa slippage': '1:1, no slippage',
   'dibatalkan kalau rugi rute lebih dari {r}%': 'cancelled if the route loses more than {r}%',
-  'jumlah pasti dari kutipan Kyber saat eksekusi': 'exact amount comes from the Kyber quote at execution',
+  'jumlah pasti dari kutipan agregator saat eksekusi': 'exact amount comes from the aggregator quote at execution',
   'Jumlah yang dijual sudah termasuk ruang slippage {s}%; kelebihannya tetap di wallet.': 'Amounts sold already include {s}% slippage room; any excess stays in the wallet.',
   'Auto-swap dimatikan di Aturan — pembukaan akan berhenti di langkah pertama.': 'Auto-swap is off in Rules — opening will stop at the first step.',
   'Seluruh rentang': 'Full range',
@@ -679,7 +679,7 @@ const EN = {
   '{s} terjual': '{s} sold',
   'sejak {a}': 'since {a}',
   'Cek ulang sisa tiap (detik)': 'Re-check leftovers every (seconds)',
-  'Satu kutipan Kyber per token per interval; swap hanya dikirim kalau ruginya sudah di bawah batas. Minimal 1 — terlalu rapat bisa kena batas laju Kyber yang juga dipakai zap': 'One Kyber quote per token per interval; the swap is only sent once the loss is under the limit. Minimum 1 — too tight can hit Kyber rate limits, which the zap path shares',
+  'Satu kutipan per token per interval; swap hanya dikirim kalau ruginya sudah di bawah batas. Minimal 1 — terlalu rapat bisa kena batas laju agregator yang juga dipakai zap': 'One quote per token per interval; the swap is only sent once the loss is under the limit. Minimum 1 — too tight can hit aggregator rate limits, which the zap path shares',
   'Fee pool + dampak harga. Di atas batas ini token disimpan dan dikutip ulang terus sampai lolos': 'Pool fee + price impact. Above this the token is kept and re-quoted until it clears',
   'Coba jual sekarang': 'Try selling now',
   'Jual manual': 'Sell manually',
@@ -739,7 +739,7 @@ const EN = {
   'Kolom Sumber memuat wallet yang disalin beserta hasil posisi aslinya. Modal target jarang sebesar modal kita, jadi yang sebanding persennya, bukan dolarnya.': "The Source column carries the wallet being copied along with how its original position ended. The target's capital is rarely the size of ours, so compare the percentages, not the dollars.",
   // ---- sell the memecoin leftover ----
   'Jual memecoin sisa setelah keluar': 'Sell leftover memecoin after exit',
-  'Token yang diterima saat menutup posisi dijual balik ke USDG/ETH lewat agregator Kyber': 'Tokens received when closing a position are sold back to USDG/ETH via the Kyber aggregator',
+  'Token yang diterima saat menutup posisi dijual balik ke USDG/ETH lewat agregator swap yang aktif': 'Tokens received when closing a position are sold back to USDG/ETH via the active swap aggregators',
   'Batas rugi jual sisa (bps)': 'Max loss when selling leftovers (bps)',
   // ---- wallet research refresh ----
   'menghitung ulang posisi {done} / {total}': 'recomputing positions {done} / {total}',
@@ -1637,7 +1637,7 @@ const EN = {
   'aksi target: {k}': 'Target action: {k}',
   'Salin hash': 'Copy hash',
   'Hash tersalin': 'Hash copied',
-  'Jumlah token dan nilai dicatat bot saat transaksi; harga swap dari Kyber.': 'Token amounts and values were recorded by the bot at transaction time; swap prices from Kyber.',
+  'Jumlah token dan nilai dicatat bot saat transaksi; harga swap dari agregator.': 'Token amounts and values were recorded by the bot at transaction time; swap prices from the aggregator.',
   'Halaman detail & grafik': 'Detail page & chart',
   // ---- position detail ----
   // token detail page
@@ -2136,7 +2136,7 @@ const EN = {
   'min. 8 karakter': 'min. 8 characters',
   'Password keystore': 'Keystore password',
   'Jual {m} dari fee ke {q} sekalian': 'Also sell the {m} from the fees for {q}',
-  'Dijual lewat Kyber tepat sesudah klaim. {q} dari fee tetap di wallet.': 'Sold through Kyber right after the claim. The {q} part of the fees stays in the wallet.',
+  'Dijual lewat agregator tepat sesudah klaim. {q} dari fee tetap di wallet.': 'Sold through the best aggregator right after the claim. The {q} part of the fees stays in the wallet.',
   'Fee dijual': 'Fees sold',
   'Fee belum terjual': 'Fees not sold yet',
   'Masuk antrean jual dan dicoba lagi otomatis. {e}': 'Queued for sale and retried automatically. {e}',

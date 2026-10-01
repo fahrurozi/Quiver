@@ -512,12 +512,12 @@ export default function PositionDetail({ id }) {
               </div>
             </div>
           </div>
-          {/* posisi tertutup: angkanya sudah final, jadi tidak ada jam kesegaran — tombolnya
-              cuma menyegarkan grafik pasar. */}
-          {/* Satu klaster aksi, rapat di kanan, tinggi seragam: jam kesegaran + perbarui
-              (pasif) dipisah garis tipis dari aksi yang mengirim transaksi. Urutannya
-              dari yang paling aman ke yang paling merusak, dan hanya "Tutup posisi"
-              yang berwarna — supaya mata langsung tahu mana yang tidak bisa dibatalkan. */}
+          {/* closed position: the numbers are final, so there is no freshness clock — the button
+              only refreshes the market chart. */}
+          {/* One action cluster, tight on the right, uniform height: freshness clock + refresh
+              (passive) are separated by a thin line from the actions that send a transaction.
+              Ordered from the safest to the most destructive, and only "Close position"
+              is coloured — so the eye knows at once which one cannot be undone. */}
           <div className="flex flex-wrap items-center gap-2">
             <Refresh at={closed ? undefined : d.syncedAt} busy={syncing} onPress={resync} label="Perbarui detail" />
             <ShareButton card={positionCard(p)} />
@@ -534,8 +534,8 @@ export default function PositionDetail({ id }) {
 
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <Stat label={closed ? 'Hasil' : 'Nilai'} value={usd(closed ? p.outUsd : p.valueUsd)} fx={closed ? p.outUsd : p.valueUsd} sub={t('modal {v}', { v: usd(p.costUsd) })} />
-        {/* APR-nya di sebelah label: yang menentukan posisi ini layak dipertahankan atau
-            tidak bukan nominal fee-nya, melainkan berapa cepat modalnya menghasilkan. */}
+        {/* The APR beside the label: what decides whether this position is worth keeping
+            is not the nominal fee but how fast the capital earns. */}
         <Stat label={closed ? 'Fee (sudah diklaim)' : 'Fee belum diklaim'} value={closed ? '—' : usd(p.feeUsd)} fx={closed ? null : p.feeUsd} valueClass={!closed && p.feeUsd > 0.005 ? 'text-success' : ''}
           badge={closed || feeApr(p) == null ? null : (
             <span className="num shrink-0 rounded bg-success/12 px-1.5 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap text-success"
@@ -546,8 +546,8 @@ export default function PositionDetail({ id }) {
         <Stat label="PnL" value={usd(p.pnlUsd)} fx={p.pnlUsd} valueClass={tone(p.pnlUsd)}
           sub={<span>{pct(p.pnlPct, 2)}{p.ilUsd != null && <> · IL <span className={tone(p.ilUsd)}>{usd(p.ilUsd)}</span></>}</span>} />
         <Stat label={closed ? 'Ditahan' : 'Umur'} value={age(p.ageHours)} sub={t('masuk {d}', { d: fmtDate(p.opened_ts) })} />
-        {/* Ongkos jalan: gas + selisih swap. Tidak ikut dihitung di PnL, padahal
-            inilah harga yang dibayar untuk masuk dan keluar posisi ini. */}
+        {/* Running cost: gas + swap spread. Not counted in PnL, although
+            it is the price paid to enter and exit this position. */}
         <Stat label="Ongkos jalan" value={p.cost?.txN ? usd(p.cost.totalUsd) : '—'} valueClass={p.cost?.totalUsd > 0.005 ? 'text-warning' : ''}
           sub={p.cost?.txN
             ? t('gas {g} · slippage {s}', { g: usd(p.cost.gasUsd, p.cost.gasUsd < 0.1 ? 3 : 2), s: usd(p.cost.slipUsd) })
@@ -587,8 +587,8 @@ export default function PositionDetail({ id }) {
         </Panel>
 
         <div className="grid gap-3">
-          {/* Angka orang yang ditiru, di atas angka posisi ini — pertanyaan yang sama
-              dijawab di tempat yang sama seperti di laci riwayat. */}
+          {/* The copied wallet's numbers, above this position's numbers — the same question
+              is answered in the same place as in the history drawer. */}
           <TargetSide p={p} className="" />
           <Panel title="Posisi ini" bodyClass="px-4 py-1">
             <div className="divide-y divide-border">
