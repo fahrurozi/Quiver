@@ -1089,9 +1089,10 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
            OR json_extract(detail, '$.recorded') = ?
            OR (kind = 'increase' AND (json_extract(detail, '$.plan.positionId') = ? OR json_extract(detail, '$.plan.tokenId') = ?))
            OR EXISTS (SELECT 1 FROM json_each(txs.detail, '$.positionSales') sale WHERE json_extract(sale.value, '$.position') = ?)
+           OR EXISTS (SELECT 1 FROM json_each(txs.detail, '$.feeSales') sale WHERE json_extract(sale.value, '$.position') = ?)
            OR hash IN (SELECT tx_hash FROM decisions WHERE position_id = ? AND tx_hash IS NOT NULL)
            OR (json_extract(detail, '$.pool') = ? AND ts BETWEEN ? AND ? AND kind IN ('zap_swap', 'mint', 'increase')))
-        ORDER BY ts`, chain.network, row.tx_open, row.tx_close, id, id, id, row.token_id, id, id, row.pool_ref, lo, hi);
+        ORDER BY ts`, chain.network, row.tx_open, row.tx_close, id, id, id, row.token_id, id, id, id, row.pool_ref, lo, hi);
       // The same pool can be entered by two consecutive positions (lp2 #6 and #7, 90 seconds
       // apart): the neighbour's mint and its zap get filtered in via the pool window. A mint/add
       // only belongs to this position if it is really linked to its number. Zap: a mint booked
@@ -1107,6 +1108,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         if (t.hash === row.tx_open || t.hash === row.tx_close || decByTx.has(t.hash)) return true;
         const d = parse(t.detail);
         return d.position === id || d.recorded === id || !!d.positionSales?.some((s) => s.position === id)
+          || !!d.feeSales?.some((s) => s.position === id)
           || (t.kind === 'increase' && (d.plan?.positionId === id || String(d.plan?.tokenId ?? '') === String(row.token_id)));
       };
       const entries = store.all(`SELECT hash, ts, kind, detail FROM txs
@@ -1127,11 +1129,15 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         const d = parse(t.detail);
         const sw = swapCostOf(d);
         const dec = decByTx.get(t.hash);
+        // A sale of this position's leftover (gotQuote vs the close estimate) or of its claimed fee
+        // memecoin (gotQuote vs the claim estimate): the proceeds replaced an estimate in its PnL.
         const sale = d.positionSales?.find((s) => s.position === id);
+        const feeSale = d.feeSales?.find((s) => s.position === id);
         const ev = {
           hash: t.hash, ts: t.ts, kind: t.kind, status: t.status, error: t.error, gasUsd: gasUsd(t),
           swap: d.tokenIn ? { tokenIn: d.tokenIn, tokenOut: d.tokenOut, symbolIn: d.symbolIn, symbolOut: d.symbolOut, amountIn: d.amountIn, amountOut: d.amountOut } : null,
-          saleDeltaUsd: sale ? (sale.gotQuote - sale.closeQuote) * k : null,
+          saleDeltaUsd: sale ? (sale.gotQuote - sale.closeQuote) * k : feeSale ? (feeSale.gotQuote - feeSale.estQuote) * k : null,
+          feeSaleUsd: feeSale ? feeSale.gotQuote * k : null,
           dex: d.dex || d.via || null, usdIn: d.usdIn ?? null, usdOut: d.usdOut ?? null,
           // The swap cost of this row: route loss (quote in → quote out) plus
           // the price shift at execution (quote out → what was actually received).

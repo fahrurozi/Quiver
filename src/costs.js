@@ -127,6 +127,7 @@ class Costs {
       }
       // One leftover sale can close several positions at once: the cost is split evenly.
       for (const s of d.positionSales || []) if (Number.isInteger(s.position)) ids.push(s.position);
+      for (const s of d.feeSales || []) if (Number.isInteger(s.position)) ids.push(s.position);
       const uniq = [...new Set(ids)];
       if (!uniq.length) {
         // No position behind it: a mint that reverted, or the sale that unwinds a zap whose

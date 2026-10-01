@@ -1619,6 +1619,8 @@ const EN = {
   'slippage': 'slippage',
   'slippage {v}': 'slippage {v}',
   'meleset {b}% dari kutipan': '{b}% off the quote',
+  'hasil jual fee {v}': 'fee sale proceeds {v}',
+  'vs taksiran {v}': 'vs estimate {v}',
   'gas {g} · slippage {s}': 'gas {g} · slippage {s}',
   'gas {g} · slippage {s} · {n} tx': 'gas {g} · slippage {s} · {n} txs',
   'buka {o} · tutup {x} · {n} tx': 'open {o} · close {x} · {n} txs',

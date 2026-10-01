@@ -186,6 +186,9 @@ function Events({ d }) {
                   {!failed && Math.abs(ev.slipUsd || 0) >= 0.005 && <div className="text-xs text-warning"
                     title={ev.slipBps != null ? t('meleset {b}% dari kutipan', { b: (ev.slipBps / 100).toFixed(2) }) : undefined}>
                     {t('slippage {v}', { v: usd(ev.slipUsd) })}</div>}
+                  {!failed && ev.feeSaleUsd != null && <div className="text-xs text-muted">{t('hasil jual fee {v}', { v: usd(ev.feeSaleUsd) })}</div>}
+                  {!failed && Math.abs(ev.saleDeltaUsd || 0) >= 0.005 && <div className={`text-xs ${ev.saleDeltaUsd < 0 ? 'text-warning' : 'text-success'}`}>
+                    {t('vs taksiran {v}', { v: usd(ev.saleDeltaUsd) })}</div>}
                   {ev.targetUsd != null && <div className="text-xs text-muted">{t('target {v}', { v: usd(ev.targetUsd) })}</div>}
                 </td>
                 <td className="py-2.5 text-end whitespace-nowrap text-muted" title={fmtDate(ev.ts)}>{ago(ev.ts)}</td>
