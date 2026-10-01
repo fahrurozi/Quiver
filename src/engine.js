@@ -1978,7 +1978,8 @@ class Engine {
 
   async recordFeeClaim(pos, hash, receipt) {
     if (this.store.get('SELECT tx_hash FROM fee_claims WHERE tx_hash=?', hash)) return {};
-    const detail = JSON.parse(this.store.get('SELECT detail FROM txs WHERE hash=?', hash)?.detail || '{}');
+    const txRow = this.store.get('SELECT kind, detail FROM txs WHERE hash=?', hash);
+    const detail = JSON.parse(txRow?.detail || '{}');
     const owner = String(detail.wallet || this.exec.address()).toLowerCase();
     const amount = (token) => this.receivedIn(receipt, token, owner);
     const amount0 = await amount(pos.token0), amount1 = await amount(pos.token1);
@@ -1995,8 +1996,15 @@ class Engine {
     try {
       const r = this.store.run('INSERT OR IGNORE INTO fee_claims(tx_hash,position_id,ts,amount0,amount1,value_quote) VALUES(?,?,?,?,?,?)',
         hash, pos.id, Date.now(), String(amount0), String(amount1), value.value);
-      if (Number(r.changes)) this.store.run(`UPDATE positions SET claimed_quote=COALESCE(claimed_quote,0)+?,
-        out_quote=out_quote+CASE WHEN status='closed' THEN ? ELSE 0 END, fees_quote=0 WHERE id=?`, value.value, value.value, pos.id);
+      if (Number(r.changes)) {
+        this.store.run(`UPDATE positions SET claimed_quote=COALESCE(claimed_quote,0)+?,
+          out_quote=out_quote+CASE WHEN status='closed' THEN ? ELSE 0 END, fees_quote=0 WHERE id=?`, value.value, value.value, pos.id);
+        // The memecoin of a plain claim now sits in the wallet at the claim-price estimate. Booking it in the
+        // fee ledger here (not only when the bot sells it) lets ANY later sale — the automatic one or a manual
+        // swap — replace the estimate with the real proceeds. A compound reinvests it, so it never waits there.
+        if (meme && txRow?.kind === 'claim_fees') this.positions.noteFeeLeftover({ posId: pos.id, token: meme.token,
+          amount: meme.amount, estQuote: meme.quoteValue, txHash: hash });
+      }
       this.store.db.exec('COMMIT');
     } catch (e) { this.store.db.exec('ROLLBACK'); throw e; }
     return { amount0: String(amount0), amount1: String(amount1), meme,
@@ -2035,8 +2043,7 @@ class Engine {
   async sellClaimedFee(pos, hash, claim, { quiet = false } = {}) {
     const meme = claim?.meme;
     if (!meme || !(BigInt(meme.amount) > 0n)) return null;
-    this.positions.noteFeeLeftover({ posId: pos.id, token: meme.token, amount: meme.amount,
-      estQuote: meme.quoteValue, txHash: hash });
+    // The fee ledger row was already written by recordFeeClaim.
     return this.sellToken({ posId: pos.id, target: pos.target, token: meme.token, quote: meme.quote,
       amount: BigInt(meme.amount), tries: 0, kind: 'fee' }, { quiet });
   }

@@ -109,9 +109,13 @@ test('a manual claim sells nothing unless asked', async () => {
   try {
     await f.e.claimFees(f.id);
     assert.equal(f.dijual.length, 0);
-    assert.equal(f.store.all('SELECT * FROM fee_leftovers').length, 0);
+    // Nothing is sold, but the memecoin is booked in the fee ledger so a later manual swap can correct the estimate.
+    const ledger = f.store.all('SELECT * FROM fee_leftovers');
+    assert.equal(ledger.length, 1);
+    assert.equal(ledger[0].amount, '150000');
     await f.e.claimFees(f.id, { sell: true });
     assert.equal(f.dijual.length, 1);
+    assert.equal(f.store.all('SELECT * FROM fee_leftovers').length, 2, 'selling does not book the claim a second time');
   } finally { f.store.db.close(); }
 });
 
@@ -120,7 +124,6 @@ test('the fee sale proceeds replace the claim price estimate, also after the pos
   try {
     await f.e.claimFees(f.id, { sell: false });
     assert.equal(f.pos().claimed_quote, 0.3);
-    f.e.positions.noteFeeLeftover({ posId: f.id, token: TOKEN, amount: '150000', estQuote: 0.15 });
     // Sold for just $0.05, not $0.15: the estimate is replaced by the actual result.
     f.e.positions.recordTokenSale({ posId: f.id, token: TOKEN, amount: 150000n, quoteToken: ADDR.usdg,
       amountOut: '50000', ethUsd: 3000 });
@@ -141,7 +144,6 @@ test('fee memecoin that vanished from the wallet stops using the claim price est
   const f = fixture();
   try {
     await f.e.claimFees(f.id, { sell: false });
-    f.e.positions.noteFeeLeftover({ posId: f.id, token: TOKEN, amount: '150000', estQuote: 0.15 });
     // Sold on another DEX / sent out: the wallet balance is down to zero.
     f.e.positions.rpc = { ethCallMany: async (calls) => calls.map(() => coder.encode(['uint256'], [0n])) };
     f.e.positions.poolLiquidityOf = async () => 1n;
