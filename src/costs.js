@@ -22,6 +22,12 @@
 // to the first OWNED transaction after it (an approve always precedes the swap/mint that
 // needs it, in the same flow). That is an estimate, not proof: the cost
 // shown is marked as approximate.
+//
+// Failed copy attempts: an entry that never became a position (a mint that reverted after its
+// zap, or a zap whose entry died) still burned gas and paid swap slippage. That cost has no
+// position to live on, so it is booked per TARGET under `failed` (key `fail:<target>` while
+// anchoring) — this is what makes net PnL reconcile with position PnL and shows which target
+// is expensive to copy.
 
 // Phase by transaction type. Those not listed here (approve, wrap, gas top-up)
 // inherit the phase of the first owned transaction after them.
@@ -37,6 +43,9 @@ const HELPER_GAP_MS = 15 * 60_000;
 
 const parse = (d) => { try { return JSON.parse(d || '{}') || {}; } catch { return {}; } };
 const empty = () => ({ gasUsd: 0, slipUsd: 0, routeUsd: 0, execUsd: 0, txN: 0 });
+const FAIL_PREFIX = 'fail:';
+const failId = (target) => `${FAIL_PREFIX}${target ? String(target).toLowerCase() : ''}`;
+const emptyFailed = () => ({ gasUsd: 0, slipUsd: 0, totalUsd: 0, attempts: 0, txN: 0, lastTs: 0 });
 const emptyCost = () => ({
   open: empty(), close: empty(), lain: empty(),
   gasUsd: 0, slipUsd: 0, routeUsd: 0, execUsd: 0, totalUsd: 0, txN: 0, hashes: [],
@@ -77,16 +86,19 @@ class Costs {
 
   of(id, ethUsd) { return this.map(ethUsd).get(id) || emptyCost(); }
 
+  // Cost of copy attempts that never became a position, per target ('' = unknown target).
+  failed(ethUsd) { return this.map(ethUsd).failed; }
+
   compute(ethUsd) {
     const store = this.store;
     const out = new Map();
+    out.failed = new Map();   // target ('' = unknown) -> cost of copy attempts that never became a position
     const bucket = (id) => {
       let c = out.get(id);
       if (!c) { c = emptyCost(); out.set(id, c); }
       return c;
     };
     const positions = store.all('SELECT id, token_id, venue, pool_ref, tx_open, tx_close FROM positions WHERE chain=?', this.network);
-    if (!positions.length) return out;
     const byOpenTx = new Map(), byCloseTx = new Map(), byToken = new Map();
     for (const p of positions) {
       if (p.tx_open) byOpenTx.set(p.tx_open, p.id);
@@ -116,7 +128,14 @@ class Costs {
       // One leftover sale can close several positions at once: the cost is split evenly.
       for (const s of d.positionSales || []) if (Number.isInteger(s.position)) ids.push(s.position);
       const uniq = [...new Set(ids)];
-      if (!uniq.length) return;
+      if (!uniq.length) {
+        // No position behind it: a mint that reverted, or the sale that unwinds a zap whose
+        // LP never opened. Both belong to the target that was being copied.
+        const failedMint = (t.kind === 'mint' || t.kind === 'increase') && t.status === 'gagal';
+        const unwind = t.kind === 'sell_leftover' && d.source === 'zap' && d.position == null && d.target;
+        if (failedMint || unwind) anchor[i] = { ids: [failId(d.target ?? d.plan?.target)], phase: 'open' };
+        return;
+      }
       // Fee claims, compounds, manual swaps: costs of this position too, but not
       // open or close costs — collected separately so the two main figures stay clean.
       const phase = OPEN_KIND.has(t.kind) ? 'open' : CLOSE_KIND.has(t.kind) ? 'close' : 'lain';
@@ -160,6 +179,13 @@ class Costs {
       }
     }
 
+    // 2c) a zap still without an owner is an entry that never reached a mint: failed copy.
+    txs.forEach((t, i) => {
+      if (anchor[i] || t.kind !== 'zap_swap') return;
+      const d = parse(t.detail);
+      if (d.target) anchor[i] = { ids: [failId(d.target)], phase: 'open' };
+    });
+
     // 3) sum up
     txs.forEach((t, i) => {
       const a = anchor[i];
@@ -169,6 +195,17 @@ class Costs {
       const sw = swapCostOf(d);
       const share = a.ids.length;
       for (const id of a.ids) {
+        if (typeof id === 'string') {
+          const key = id.slice(FAIL_PREFIX.length);
+          let f = out.failed.get(key);
+          if (!f) { f = emptyFailed(); out.failed.set(key, f); }
+          f.gasUsd += gasUsd;
+          f.slipUsd += sw.route + sw.exec;
+          f.txN += 1;
+          if (t.kind === 'mint' || t.kind === 'increase') f.attempts += 1;
+          f.lastTs = Math.max(f.lastTs, t.ts || 0);
+          continue;
+        }
         const c = bucket(id);
         const b = c[a.phase] || c.lain;
         b.gasUsd += gasUsd / share;
@@ -179,6 +216,7 @@ class Costs {
         c.hashes.push(t.hash);
       }
     });
+    for (const f of out.failed.values()) f.totalUsd = f.gasUsd + f.slipUsd;
     for (const c of out.values()) {
       for (const ph of ['open', 'close', 'lain']) {
         c.gasUsd += c[ph].gasUsd; c.slipUsd += c[ph].slipUsd;

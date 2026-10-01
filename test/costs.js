@@ -192,6 +192,46 @@ const tx = (store, hash, ts, kind, detail, { gas = true, status = 'sukses', gasQ
     });
   }
 
+  // ---- copy attempts that never became a position are booked per target ----
+  {
+    const { store, api } = world();
+    const TA = '0x' + 'aa'.repeat(20), TB = '0x' + 'bb'.repeat(20);
+    pos(store, 8, { status: 'open' });
+    tx(store, '0xmint8', T0, 'mint', { recorded: 8, target: TA });
+    // Target A: zap, then the mint reverted, then the zap token was sold back.
+    tx(store, '0xzapA', T0 + 100_000, 'zap_swap', { pool: POOL2, target: TA, usdIn: 50, usdOut: 49 });
+    tx(store, '0xmintA', T0 + 110_000, 'mint', { pool: POOL2, target: TA, zapped: { hashes: ['0xzapA'] } }, { status: 'gagal' });
+    tx(store, '0xsellA', T0 + 200_000, 'sell_leftover', { position: null, source: 'zap', target: TA, usdIn: 48, usdOut: 47.5 });
+    // Target B: a zap whose entry died before any mint was sent.
+    tx(store, '0xzapB', T0 + 300_000, 'zap_swap', { pool: POOL2, target: TB, usdIn: 20, usdOut: 19.5 });
+    const costs = new Costs(store);
+    const f = costs.failed(ETH_USD);
+    await t('failed mint + its zap + the unwind sale are charged to that target', () => {
+      const a = f.get(TA);
+      assert.equal(a.attempts, 1);
+      assert.equal(a.txN, 3);
+      assert.ok(near(a.gasUsd, 3 * GAS.usd), `gas ${a.gasUsd}`);
+      assert.ok(near(a.slipUsd, 1.5), `slip ${a.slipUsd}`);   // 1.0 zap + 0.5 sale
+      assert.ok(near(a.totalUsd, 3 * GAS.usd + 1.5));
+    });
+    await t('a zap with no mint at all is also a failed copy of its target', () => {
+      const b = f.get(TB);
+      assert.equal(b.attempts, 0);
+      assert.ok(near(b.totalUsd, GAS.usd + 0.5), `total ${b.totalUsd}`);
+    });
+    await t('the failed attempt is not charged to the position that did open', () => {
+      const c = costs.of(8, ETH_USD);
+      assert.equal(c.txN, 1);
+    });
+    await t('the targets list carries the per-target failed-copy cost', async () => {
+      for (const a of [TA, TB]) store.run('INSERT INTO targets(address,label,added_ts) VALUES(?,?,?)', a, null, T0);
+      const r = await api('GET', '/api/targets', {}, {});
+      const row = (x) => (r.targets || r).find((y) => y.address === x);
+      assert.ok(near(row(TA).ours.failedUsd, f.get(TA).totalUsd), JSON.stringify(row(TA).ours));
+      assert.equal(row(TA).ours.failedAttempts, 1);
+    });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

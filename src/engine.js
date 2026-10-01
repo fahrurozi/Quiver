@@ -2561,7 +2561,7 @@ class Engine {
     const ref = await this.sellRef(item, amount);
     const swapOpts = {
       slippageBps: rules.swap.max_slippage_bps, maxLossBps: rules.exit.sell_max_loss_bps,
-      kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item) }, ref, requireLoss: true,
+      kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item), target: item.target ?? null }, ref, requireLoss: true,
     };
     let sold = amount;
     try {
@@ -2673,7 +2673,7 @@ class Engine {
     const pick = await pickSwapPool(ctx, { tokenIn: token, tokenOut: quote, amountIn: amount, minOut,
       maxImpactBps: maxLoss, deadlineSec: this.exec.deadline(), extra, info: {} });
     if (!pick) return null;
-    const h = await this.exec.send(pick.tx, { kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item), via: pick.pool.pool_ref, dex: `pool ${pick.pool.venue}`, usdOut,
+    const h = await this.exec.send(pick.tx, { kind: 'sell_leftover', detail: { position: item.posId, source: leftoverSource(item), target: item.target ?? null, via: pick.pool.pool_ref, dex: `pool ${pick.pool.venue}`, usdOut,
       tokenIn: String(token).toLowerCase(), tokenOut: String(quote).toLowerCase(), amountInRaw: amount.toString() } });
     const rc = await this.exec.waitReceipt(h, 90_000);
     if (rc.timeout) throw new Error(`jual lewat pool ${h} belum terkonfirmasi setelah 90 detik`);

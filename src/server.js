@@ -653,6 +653,13 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       const h = netResult(p);
       g.closed++; g.realized += p.pnl; if (h > FLAT) g.wins++; else if (h < -FLAT) g.losses++;
     }
+    // Copy attempts that never became a position (reverted mint, orphan zap): the cost has no
+    // position row, so it is shown per target — which target is expensive to copy.
+    for (const [target, f] of costs.failed(eth)) {
+      if (!target) continue;
+      const g = grp(target);
+      g.failedUsd = f.totalUsd; g.failedAttempts = f.attempts;
+    }
     return by;
   };
 
@@ -920,6 +927,8 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
           // the largest cost that is in net PnL but not in position PnL. Valued at the
           // current ETH price, the same as the transaction list.
           ...gasSince(capital?.baselineTs ?? 0),
+          // Gas + swap slippage of copy attempts that never became a position, all targets.
+          failedCopyUsd: [...costs.failed(engine.ethUsd).values()].reduce((a, f) => a + f.totalUsd, 0),
         },
         capital: capital ? { ...capital, deposits: engine.capital.rows().map((d) => ({
           ts: d.ts, kind: d.kind, symbol: d.symbol, amount: Number(d.amount) / (d.symbol === chain.usdgSymbol ? 10 ** chain.usdgDecimals : 1e18), usd: d.usd, ethUsd: d.eth_usd, txHash: d.tx_hash, counterparty: d.counterparty,
@@ -1490,7 +1499,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       for (const r of rows) {
         // the result of our positions copied from this wallet (USD)
         const o = ours.get(r.address);
-        r.ours = o ? { open: o.open, value: o.value, upnl: o.upnl, closed: o.closed, wins: o.wins, losses: o.losses, realized: o.realized } : null;
+        r.ours = o ? { open: o.open, value: o.value, upnl: o.upnl, closed: o.closed, wins: o.wins, losses: o.losses, realized: o.realized, failedUsd: o.failedUsd ?? 0, failedAttempts: o.failedAttempts ?? 0 } : null;
         r.rulesResolved = rulesFor(cfg.rules, r.rules);
         r.rulesOwn = r.rules ? JSON.parse(r.rules) : null;
         const st = store.get('SELECT COUNT(*) n, MAX(ts) last FROM actions WHERE chain=? AND target=?', chain.network, r.address);
