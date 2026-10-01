@@ -1,19 +1,19 @@
-// Dwibahasa Indonesia / Inggris.
+// Bilingual Indonesian / English.
 //
-// Teks Indonesia dipakai langsung sebagai kunci. Konsekuensinya: kalau sebuah
-// terjemahan terlewat, yang muncul tetap kalimat Indonesia yang benar — bukan kunci
-// mentah seperti "settings.wallet.title" atau teks kosong. Untuk dua bahasa, itu
-// menghilangkan seluruh kelas bug "kunci tidak ketemu".
+// The Indonesian text is used directly as the key. Consequence: when a translation
+// is missed, what shows is still a correct Indonesian sentence — not a raw key
+// like "settings.wallet.title" or empty text. For two languages, that removes
+// the whole class of "key not found" bugs.
 //
-// Sisipan nilai: t('Tahap {n} dari 2', { n: 1 }).
+// Value interpolation: t('Tahap {n} dari 2', { n: 1 }).
 import { formatNote } from '../../src/message-copy.mjs';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { I18nProvider as AriaI18n } from '@heroui/react';
 
 export const LOCALES = { id: 'Indonesia', en: 'English' };
 
-// Dipakai juga oleh fmt.js untuk memformat angka dan waktu tanpa harus
-// mengoper locale ke setiap pemanggilan.
+// Also used by fmt.js to format numbers and time without having to
+// pass the locale to every call.
 let current = 'id';
 const listeners = new Set();
 export const getLocale = () => current;
@@ -311,14 +311,14 @@ const EN = {
   'Swap manual': 'Manual swap',
   'Jual token sisa': 'Sell leftover token',
   'Izin Kyber': 'Kyber approval',
-  // --- Ringkasan: portofolio ---
+  // --- Summary: portfolio ---
   'Total portofolio': 'Total portfolio',
   'Total PnL': 'Total PnL',
   'PnL bersih': 'Net PnL',
   'Nilai wallet saat bot mulai mencatat + setoran − penarikan': 'Wallet value when the bot started recording + deposits − withdrawals',
   'modal {m} · {p} · PnL posisi {v}': 'capital {m} · {p} · position PnL {v}',
   'modal {m} · PnL posisi {v}': 'capital {m} · position PnL {v}',
-  // --- Ringkasan: ukuran kesehatan LP ---
+  // --- Summary: LP health measures ---
   'APR {v}': 'APR {v}',
   'Fee seluruh posisi terbuka (termasuk yang sudah dipanen) disetahunkan terhadap modalnya': 'Fees across all open positions (harvested ones included), annualised against their capital',
   'Fee vs IL': 'Fees vs IL',
@@ -415,7 +415,7 @@ const EN = {
   'terealisasi {v}': 'realised {v}',
   'Belum ada posisi': 'No positions yet',
   'Rata-rata ditahan': 'Average hold',
-  // --- tampilan baru (dasbor dirapikan) ---
+  // --- new look (dashboard tidied up) ---
   'Belum dipindai': 'Not scanned yet',
   'Dipindai': 'Scanned',
   'Durasi': 'Duration',
@@ -423,7 +423,7 @@ const EN = {
   'Likuiditas ditarik dan fee diklaim dalam satu transaksi. Nilai sekarang {v}.': 'Liquidity is withdrawn and fees are claimed in one transaction. Current value {v}.',
   'Pernah dipindai': 'Previously scanned',
   'PnL wallet': 'Wallet PnL',
-  // saldo target: kas wallet + nilai posisi LP-nya (penanda wallet yang sudah berhenti)
+  // target balance: wallet cash + the value of its LP positions (marker of a wallet that has stopped)
   'Saldo dia': 'Their balance',
   'Belum terbaca': 'Not read yet',
   'kas {c} · LP {l}': 'cash {c} · LP {l}',
@@ -505,7 +505,7 @@ const EN = {
   'Buka Pengaturan': 'Open Settings',
   'Token yang ditukar': 'Token to swap from',
   'Token yang diterima': 'Token to receive',
-  // ---- LP manual & swap ----
+  // ---- manual LP & swap ----
   'LP manual': 'Manual LP',
   'Membuka posisi sendiri, di luar penyalinan target. Jalur eksekusinya sama: kas dijembatani, token ditukar seperlunya, lalu mint.': 'Open a position yourself, outside target copying. Same execution path: cash is bridged, tokens swapped as needed, then minted.',
   'Mode simulasi': 'Simulation mode',
@@ -596,7 +596,7 @@ const EN = {
   'Tukar': 'Swap',
   'Ya, tukar sekarang': 'Yes, swap now',
   'Swap selesai': 'Swap done',
-  // --- Swap: pemilih token, token manual, saldo, riwayat ---
+  // --- Swap: token picker, manual token, balance, history ---
   'Pilih token': 'Select token',
   'Tukar dari': 'Swap from',
   'Tukar ke': 'Swap to',
@@ -662,7 +662,7 @@ const EN = {
   '{s} ditambahkan': '{s} added',
   '{s} ditambahkan — saldonya kosong, jadi dipasang sebagai token tujuan': '{s} added — its balance is empty, so it was set as the token to receive',
   'Kurs': 'Rate',
-  // --- Peringatan sisa belum terjual ---
+  // --- Unsold leftover warning ---
   '{a} {s} belum terjual — posisi #{id}': '{a} {s} not sold — position #{id}',
   '{a} {s} belum terjual': '{a} {s} not sold',
   'Sisa belum terjual: {s}': 'Leftover not sold: {s}',
@@ -694,7 +694,7 @@ const EN = {
   'slippage {p}%': 'slippage {p}%',
   'Tukar lagi': 'Swap again',
   'Aksi': 'Actions',
-  // ---- aturan yang baru bisa disetel ----
+  // ---- rules that can now be tuned ----
   'Pembulatan tick': 'Tick rounding',
   'Ke yang terdekat': 'To nearest',
   'Ke bawah': 'Down',
@@ -704,7 +704,7 @@ const EN = {
   'Pool yang baru dibuat sering jebakan; 0 = mati': 'Freshly created pools are often traps; 0 = off',
   'Batas fee pool': 'Pool fee limit',
   'Dalam satuan fee Uniswap: 3000 = 0,3%, 100000 = 10%': 'In Uniswap fee units: 3000 = 0.3%, 100000 = 10%',
-  // ---- bot Telegram ----
+  // ---- Telegram bot ----
   'Bot Telegram': 'Telegram bot',
   'Kendalikan bot ini dari Telegram: semua yang bisa dilakukan dasbor, bisa dilakukan lewat obrolan.': 'Control this bot from Telegram: anything the dashboard can do, a chat can do.',
   'token terpasang, belum tersambung': 'token set, not connected yet',
@@ -729,7 +729,7 @@ const EN = {
   'Peringatan': 'Warnings',
   'Semua baris log': 'Every log line',
   'di luar bot': 'outside bot',
-  // ---- asal posisi: target yang disalin vs hasil kita ----
+  // ---- position origin: the target copied vs our own doing ----
   'Posisi ini tidak menyalin target mana pun: dibuka manual, atau sudah ada di wallet sebelum bot memantaunya.': 'This position copies no target: it was opened manually, or was already in the wallet before the bot started tracking it.',
   'PnL target': 'Target PnL',
   'belum dipindai': 'not scanned yet',
@@ -737,18 +737,18 @@ const EN = {
   'modal target {v}': "target's capital {v}",
   'Wallet target ini belum diriset, jadi hasil posisi aslinya belum diketahui. Buka halaman target dan pindai wallet-nya.': 'This target wallet has not been researched, so the original position\u2019s result is unknown. Open the target page and scan the wallet.',
   'Kolom Sumber memuat wallet yang disalin beserta hasil posisi aslinya. Modal target jarang sebesar modal kita, jadi yang sebanding persennya, bukan dolarnya.': "The Source column carries the wallet being copied along with how its original position ended. The target's capital is rarely the size of ours, so compare the percentages, not the dollars.",
-  // ---- jual sisa memecoin ----
+  // ---- sell the memecoin leftover ----
   'Jual memecoin sisa setelah keluar': 'Sell leftover memecoin after exit',
   'Token yang diterima saat menutup posisi dijual balik ke USDG/ETH lewat agregator Kyber': 'Tokens received when closing a position are sold back to USDG/ETH via the Kyber aggregator',
   'Batas rugi jual sisa (bps)': 'Max loss when selling leftovers (bps)',
-  // ---- pembaruan riset wallet ----
+  // ---- wallet research refresh ----
   'menghitung ulang posisi {done} / {total}': 'recomputing positions {done} / {total}',
   'mencari posisi baru sejak pindai terakhir': 'looking for new positions since the last scan',
   'Perbarui': 'Refresh',
   'Diperbarui {when} · blok {from}–{to}': 'Updated {when} · blocks {from}–{to}',
   'Diperbarui otomatis saat wallet ini beraksi, dan saat dibuka bila lebih dari 5 menit.': 'Updates automatically when this wallet acts, and on open if older than 5 minutes.',
   'Pembaruan otomatis gagal: {e} — dicoba lagi sebentar lagi.': 'Automatic update failed: {e} — retrying shortly.',
-  // ---- navigasi & kerangka ----
+  // ---- navigation & frame ----
   'Pemantauan': 'Monitoring',
   'Copy': 'Copy',
   'Riset': 'Research',
@@ -802,7 +802,7 @@ const EN = {
   'Sebelumnya': 'Previous',
   'Berikutnya': 'Next',
 
-  // ---- ringkasan ----
+  // ---- summary ----
   'Eksposur terbuka': 'Open exposure',
   'Fee terkumpul': 'Fees earned',
   'PnL belum terealisasi': 'Unrealised PnL',
@@ -846,7 +846,7 @@ const EN = {
   'Mode simulasi tidak mengirim transaksi.': 'Simulation mode does not send transactions.',
   'Diperbarui {t}': 'Updated {t}',
 
-  // ---- posisi ----
+  // ---- positions ----
   'Posisi LP milik bot — nilai, fee, dan PnL diperbarui dari chain tiap 30 detik.':
     'The bot’s own LP positions — value, fees and PnL refreshed from chain every 30 seconds.',
   'Posisi terbuka ({n})': 'Open positions ({n})',
@@ -897,7 +897,7 @@ const EN = {
   'Gagal: {e}': 'Failed: {e}',
   'Likuiditas ditarik dan fee diklaim dalam satu transaksi. Nilai sekarang {v} + fee {f}.':
     'Liquidity is withdrawn and fees are claimed in one transaction. Current value {v} + {f} in fees.',
-  // ---- peringatan target ----
+  // ---- target alerts ----
   'Peringatan target': 'Target alerts',
   'Toast dan bunyi saat wallet target membuka posisi LP, dan saat posisi salinan ditutup — lengkap dengan PnL-nya. Bunyi buka dan tutup berbeda.':
     'A toast and a sound when a target wallet opens an LP position, and when a copied position is closed — with its PnL. Open and close use different sounds.',
@@ -938,14 +938,14 @@ const EN = {
   'Koneksi ke server terputus sebelum ada jawaban. Transaksinya mungkin tetap diproses — cek lagi posisinya sebentar lagi.':
     'The connection to the server dropped before it answered. The transaction may still go through — check the position again shortly.',
   'lebar {w}%': 'width {w}%',
-  // ---- rahasia lewat .env ----
+  // ---- secrets via .env ----
   'dari .env': 'from .env',
   '{what} diatur lewat': '{what} is set by',
   'di berkas .env server. Ubah di sana lalu restart bot.': 'in the server’s .env file. Change it there, then restart the bot.',
   'Kunci wallet': 'Wallet key',
   'Token akses': 'Access token',
 
-  // ---- aktivitas ----
+  // ---- activity ----
   'Setiap gerakan LP wallet target dan keputusan bot atasnya.':
     'Every LP move by target wallets and the bot’s decision on it.',
   'Semua keputusan': 'All decisions',
@@ -979,7 +979,7 @@ const EN = {
   'Bungkus ETH': 'Wrap ETH',
   'Buka WETH': 'Unwrap WETH',
 
-  // ---- target ----
+  // ---- targets ----
   'Wallet yang posisi LP-nya dicermin. Klik sebuah wallet untuk melihat PnL, posisi berjalan, dan riwayat posisinya.':
     'Wallets whose LP positions are mirrored. Click a wallet to see its PnL, live positions and position history.',
   'Tambah wallet': 'Add wallet',
@@ -1028,7 +1028,7 @@ const EN = {
   'Modal di posisi kita': 'Capital in our positions',
   'Aturan wallet ini': 'Rules for this wallet',
   'Kinerja LP wallet ini': 'This wallet’s LP performance',
-  // isi wallet (portofolio) di detail target
+  // wallet contents (portfolio) in the target detail
   'Isi wallet': 'Wallet holdings',
   'Jumlah': 'Amount',
   'Porsi': 'Share',
@@ -1044,14 +1044,14 @@ const EN = {
   '{n} token tidak ditemukan harganya dan tidak ikut dihitung dalam total.': '{n} tokens have no known price and are left out of the total.',
   'Token yang masuk lewat kontrak lain baru terdeteksi setelah pindai transfer (~1 hari terakhir) selesai.': 'Tokens received via other contracts show up once the transfer scan (~last 1 day) completes.',
 
-  // ---- aturan ----
+  // ---- rules ----
   'Aturan default': 'Default rules',
   'Berlaku untuk semua target yang tidak punya aturan sendiri.':
     'Applies to every target that has no rules of its own.',
   'Aturan tersimpan': 'Rules saved',
   'Gagal menyimpan': 'Save failed',
 
-  // ---- wallet / riset ----
+  // ---- wallet / research ----
   'PnL, fee, gaya ber-LP, dan seluruh riwayat posisi wallet mana pun — dihitung langsung dari chain. Klik baris posisi untuk melihat tiap kejadian on-chain-nya.':
     'PnL, fees, LP style and the full position history of any wallet — computed straight from chain. Click a position row to see every on-chain event behind it.',
   'Alamat wallet': 'Wallet address',
@@ -1126,7 +1126,7 @@ const EN = {
   'Pokok & fee dibaca dari state pool dan posisi tepat di blok tiap kejadian (node arsip). Posisi yang dibuka-tutup tanpa ada swap di rentangnya tercatat impas, bukan kalah.':
     'Principal and fees are read from pool and position state exactly at the block of each event (archive node). A position opened and closed with no swap inside its range is recorded as break-even, not a loss.',
 
-  // rentang harga
+  // price range
   'Rentang {lo} – {hi}{q} per {b}': 'Range {lo} – {hi}{q} per {b}',
   'Harga masuk {p}': 'Entry price {p}',
   'Harga kini {p}{m}': 'Current price {p}{m}',
@@ -1149,7 +1149,7 @@ const EN = {
   'harga kini': 'current price',
   'harga keluar': 'exit price',
 
-  // ---- laci riwayat posisi wallet yang diriset ----
+  // ---- history drawer of a researched wallet's position ----
   'Tarik likuiditas': 'Withdraw liquidity',
   'Harga pool': 'Pool price',
   'blok {n}': 'block {n}',
@@ -1169,7 +1169,7 @@ const EN = {
     'Principal and fees are separated with liquidity math against pool state at each event block, not estimated from token transfers.',
   'Halaman pool & grafik': 'Pool page & chart',
 
-  // sisi kita atas posisi wallet itu (salinan / alasan tidak menyalin)
+  // our side of that wallet's position (copy / reason for not copying)
   'Salinan kita': 'Our copy',
   'Kendali manual': 'Manual control',
   'Lihat posisi #{id}': 'View position #{id}',
@@ -1200,7 +1200,7 @@ const EN = {
   'ambil dari otomasi': 'take back from automation',
   'titip ke otomasi': 'hand over to automation',
 
-  // sensor nilai portofolio
+  // portfolio value censoring
   'Sensor nilai portofolio': 'Hide portfolio values',
   'Tampilkan nilai portofolio': 'Show portfolio values',
   'Menutup semua nilai dolar milik kita — saldo, modal, PnL, fee, dan jumlah token — dengan $•••••. Persen dan data pasar tetap terlihat. Berguna untuk berbagi layar, merekam, atau membuka dasbor di tempat umum.':
@@ -1211,7 +1211,7 @@ const EN = {
   'Sama dengan ikon mata di sebelah tombol tema dan di mini app Telegram — satu sakelar untuk semuanya. Berlaku di semua tab dan perangkat, dan tetap tersimpan sampai dimatikan lagi.':
     'The same as the eye icon next to the theme button and in the Telegram mini app — one switch for everything. It applies to every tab and device, and stays until turned off again.',
 
-  // sisi target atas posisi kita (laci posisi bot)
+  // the target's side of our position (bot position drawer)
   'Posisi yang kita tiru': 'The position we mirror',
   'Tidak meniru siapa pun': 'Mirrors nobody',
   'Dia masih di dalam': 'They are still in',
@@ -1240,7 +1240,7 @@ const EN = {
   'dia buka {w}': 'they opened it {w}',
   '{n} aksi terpantau': '{n} watched actions',
 
-  // ---- profil gaya LP (dulu halaman Scout, sekarang di dalam Wallet) ----
+  // ---- LP style profile (formerly the Scout page, now inside Wallet) ----
   'Gaya LP · dari {n} posisi berjalan': 'LP style · from {n} open positions',
   'Sedang in-range': 'Currently in range',
   'Lebar rentang khas': 'Typical range width',
@@ -1251,7 +1251,7 @@ const EN = {
   'Periksa': 'Check',
   'Progres': 'Progress',
 
-  // ---- pengaturan ----
+  // ---- settings ----
   'Wallet & mode': 'Wallet & mode',
   'RPC': 'RPC',
   'Gas': 'Gas',
@@ -1261,7 +1261,7 @@ const EN = {
   'Mata uang kedua di samping dolar': 'A second currency next to the dollar',
   'Sensor nilai dan mata uang kedua': 'Value privacy and a second currency',
   'Keamanan': 'Security',
-  // mata uang kedua
+  // second currency
   'Mata uang kedua': 'Second currency',
   'Semua nominal di dasbor dihitung dalam dolar — itu satuan yang dipakai pool, harga token, dan seluruh perhitungan PnL. Pilihan di sini menambahkan nilai yang sama dalam mata uang lain, ditulis kecil di sebelah angka dolarnya, supaya nominalnya punya rasa besaran. Angka utamanya tidak berubah.':
     'Every amount on this dashboard is computed in dollars — that is the unit of the pools, the token prices, and every PnL calculation. This setting adds the same amount in another currency, written small beside the dollar figure, so the numbers have a sense of scale. The main figure does not change.',
@@ -1404,7 +1404,7 @@ const EN = {
   'Salin': 'Copy',
   'Tersalin': 'Copied',
 
-  // ---- skema aturan ----
+  // ---- rule schema ----
   'Ukuran posisi': 'Position size',
   'Cara menentukan ukuran': 'How size is decided',
   'Sama persis dengan target': 'Exactly the same as the target',
@@ -1476,9 +1476,9 @@ const EN = {
   'Daftar hitam token (alamat, pisah koma)': 'Token blacklist (addresses, comma separated)',
   'Daftar putih token (kosong = semua)': 'Token whitelist (empty = all)',
 
-  // ---- alasan keputusan dari mesin ----
-  // Kalimatnya dirangkai di server dengan nilai yang disisipkan, jadi diterjemahkan
-  // per potongan: bagian tetapnya diganti, angka/alamat/pesan RPC dibiarkan apa adanya.
+  // ---- reasons for engine decisions ----
+  // The sentences are assembled on the server with the values inserted, so they are translated
+  // piece by piece: the fixed part is swapped, numbers/addresses/RPC messages are left as they are.
   'tidak ada cermin posisi yang cocok': 'no matching mirrored position',
   'posisi dititipkan ke kontrak otomasi — bukan sinyal keluar':
     'position handed to an automation contract — not an exit signal',
@@ -1494,7 +1494,7 @@ const EN = {
   'tutup penuh': 'fully closed',
   'kurangi': 'reduced',
 
-  // ---- potongan alasan (pengganti sebagian) ----
+  // ---- reason pieces (partial replacement) ----
   '@simulasi GAGAL:': 'simulation FAILED:',
   '@simulasi OK': 'simulation OK',
   '@jenis aksi': 'action type',
@@ -1553,7 +1553,7 @@ const EN = {
   '@venue': 'venue',
   '@dimatikan': 'disabled',
 
-  // ---- waktu ----
+  // ---- time ----
   '{n} dtk lalu': '{n} sec ago',
   '{n} mnt lalu': '{n} min ago',
   '{n} jam lalu': '{n} hr ago',
@@ -1570,7 +1570,7 @@ const EN = {
   'PnL LP saat tutup': 'LP PnL at close',
   'Perubahan hasil setelah tutup': 'Change in proceeds after close',
   'Hasil LP menilai token saat penutupan. PnL total mencakup hasil penjualan sisa token; nilai swap bukan tambahan utuh ke hasil LP.': 'LP proceeds value tokens at closing. Total PnL includes leftover token sales; swap proceeds are not added in full to the LP proceeds.',
-  // ---- laci riwayat posisi ----
+  // ---- position history drawer ----
   'Klik baris untuk riwayat transaksi dan catatan bot.': 'Click a row for its transaction history and bot notes.',
   'Modal dan hasil dari pemindaian wallet; posisi yang masih terbuka dinilai ulang di harga sekarang. Klik baris untuk kejadian on-chain-nya.': 'Capital and proceeds from the wallet scan; open positions are revalued at current prices. Click a row for its on-chain events.',
   'Posisi LP milik bot — nilai, fee, dan PnL diperbarui dari chain tiap 30 detik. Klik baris untuk melihat riwayat transaksi dan catatan bot.': 'The bot’s LP positions — value, fees and PnL refreshed from chain every 30 s. Click a row for its transaction history and bot notes.',
@@ -1611,7 +1611,7 @@ const EN = {
   'menunggu konfirmasi': 'Awaiting confirmation',
   'via {dex}': 'Via {dex}',
   'gas {v}': 'Gas {v}',
-  // ongkos jalan posisi: gas terbakar + selisih swap (buka/tutup)
+  // position running cost: gas burned + swap spread (open/close)
   'Ongkos jalan': 'Running cost',
   'Ongkos': 'Cost',
   'Ongkos buka / tutup': 'Open / close cost',
@@ -1639,8 +1639,8 @@ const EN = {
   'Hash tersalin': 'Hash copied',
   'Jumlah token dan nilai dicatat bot saat transaksi; harga swap dari Kyber.': 'Token amounts and values were recorded by the bot at transaction time; swap prices from Kyber.',
   'Halaman detail & grafik': 'Detail page & chart',
-  // ---- detail posisi ----
-  // halaman detail token
+  // ---- position detail ----
+  // token detail page
   'Kembali': 'Back',
   '{n} desimal': '{n} decimals',
   'aset kuotasi': 'quote asset',
@@ -1682,7 +1682,7 @@ const EN = {
   'token tidak dikenal — belum pernah terlihat di chain maupun DexScreener': 'unknown token — never seen on chain or on DexScreener',
   'dalam {q}': 'in {q}',
   'Skala harga': 'Price scale',
-  // halaman detail pool
+  // pool detail page
   'Bot belum pernah membuka posisi di sini': 'The bot has never opened a position here',
   'Pool tidak ditemukan': 'Pool not found',
   'Harga {b}': '{b} price',
@@ -1865,6 +1865,38 @@ const EN = {
   'Harga dibaca langsung dari pool tiap {s} detik': 'Price read straight from the pool every {s} seconds',
   'batas bawah': 'lower',
   'rentang yang akan di-LP': 'range to provide liquidity in',
+  'Naik bertahap': 'Stepped up',
+  'Rata': 'Equal',
+  'Berat ×1,5': 'Weighted ×1.5',
+  'Berat ×2': 'Weighted ×2',
+  'Setiap layer dapat porsi yang sama.': 'Every layer gets the same share.',
+  'Layer ke-1 porsi 1, ke-2 porsi 2, dst — makin dalam makin besar.': 'Layer 1 gets 1 part, layer 2 gets 2 parts, and so on — the deeper, the bigger.',
+  'Tiap layer 1,5× layer di atasnya — dana menumpuk di bawah.': 'Each layer is 1.5× the one above it — the money piles up at the bottom.',
+  'Tiap layer 2× layer di atasnya — hampir semua dana di layer terdalam.': 'Each layer is 2× the one above it — almost all the money sits in the deepest layer.',
+  'Dekat · −40%': 'Near · −40%',
+  'Sedang · −5% … −60%': 'Medium · −5% … −60%',
+  'Dalam · −10% … −80%': 'Deep · −10% … −80%',
+  'Metode': 'Method',
+  'Metode layer': 'Layer method',
+  'Jumlah layer': 'Number of layers',
+  'Layer terdekat mulai (di bawah harga)': 'Nearest layer starts (below the price)',
+  'Layer terdalam berakhir (di bawah harga)': 'Deepest layer ends (below the price)',
+  'Batas terdalam harus lebih jauh di bawah harga daripada layer terdekat, dan kurang dari 100%.': 'The deepest bound must be further below the price than the nearest layer, and under 100%.',
+  'Semua layer ada di bawah harga kini, jadi hanya aset kuotasi (misal USDG) yang disetor — tanpa swap. Dana di sebuah layer baru berubah jadi token saat harga turun menembus layer itu.': 'Every layer sits below the current price, so only the quote asset (e.g. USDG) is deposited — no swap. The money in a layer only turns into the token once the price falls through that layer.',
+  'Membuka layer {d}/{n}…': 'Opening layer {d}/{n}…',
+  'Semua layer terbuka': 'All layers opened',
+  'Berhenti di tengah jalan': 'Stopped halfway',
+  'Layer {n}': 'Layer {n}',
+  '{n} layer sudah terbuka dan tetap berjalan.': '{n} layers are already open and keep running.',
+  'Pilih pool, isi nominal, dan atur layer — pratinjau muncul sendiri.': 'Pick a pool, fill in the amount and set the layers — the preview appears by itself.',
+  'Total {n} layer': 'Total of {n} layers',
+  'Layer dibuka satu per satu, dari yang terdekat. Kalau satu gagal, yang sudah terbuka tetap berjalan.': 'Layers are opened one by one, nearest first. If one fails, those already open keep running.',
+  'Buka {n} layer · {v}': 'Open {n} layers · {v}',
+  'Kirim {n} transaksi sungguhan?': 'Send {n} real transactions?',
+  '{v} ke {pair}, di −{a}% sampai −{b}% dari harga kini.': '{v} into {pair}, at −{a}% to −{b}% from the current price.',
+  'Satu rentang': 'Single range',
+  'Berlayer': 'Layered',
+  'Mode rentang': 'Range mode',
   'geser garis atau pita untuk mengubahnya': 'drag a line or the band to change it',
   'Seluruh rentang — tidak ada batas untuk digambar.': 'Full range — no bounds to draw.',
   'harga dalam {q}': 'price in {q}',
@@ -1890,7 +1922,7 @@ const EN = {
   'Volume 24 jam': '24h volume',
   '1 jam {v}': '1 hr {v}',
   'bagian kita {v}': 'our share {v}',
-  // ---- titik keamanan GMGN di daftar posisi ----
+  // ---- GMGN safety dot in the position list ----
   'GMGN': 'GMGN',
   'Keamanan token': 'Token safety',
   'Bahaya menurut GMGN': 'Dangerous per GMGN',
@@ -1919,7 +1951,7 @@ const EN = {
   'Likuiditas sudah nol di chain': 'Liquidity is already zero on-chain',
   'Posisi ini akan ditandai tertutup pada sinkronisasi berikutnya.': 'This position will be marked closed on the next sync.',
 
-  // Kartu bagikan (ShareCard)
+  // Share card (ShareCard)
   'Bagikan': 'Share',
   'Menggambar kartu…': 'Rendering card…',
   'Kartu gagal digambar': 'Could not render the card',
@@ -2018,7 +2050,7 @@ const EN = {
   'Ketik untuk mencari…': 'Type to search…',
   'Mencari…': 'Searching…',
   'Tidak ada hasil untuk "{q}"': 'No results for "{q}"',
-  // Halaman Monitor
+  // Monitor page
   'Monitor': 'Monitor',
   'Semua posisi terbuka dalam satu layar: satu grafik per pool dengan rentang tiap posisi sebagai pita berwarna (klik pita untuk memilih), harga live dari chain, PnL, dan seberapa dekat posisi ke aturan keluar otomatis.': 'Every open position on one screen: one chart per pool with each position\'s range as a coloured band (click a band to select it), live on-chain price, PnL, and how close the position is to an automatic exit rule.',
   'Otomatis': 'Auto',
@@ -2150,9 +2182,9 @@ const EN = {
 
 const DICT = { id: null, en: EN };
 
-// Alasan dari mesin: coba padanan utuh, kalau tidak ada ganti potongan yang dikenal.
-// Sisanya (angka, alamat, pesan error RPC) dibiarkan apa adanya — memang bukan
-// kalimat kita, dan pesan RPC aslinya berbahasa Inggris.
+// Engine reasons: try an exact match first, otherwise swap the known pieces.
+// The rest (numbers, addresses, RPC error messages) is left as it is — it is not
+// our sentence, and the original RPC messages are in English.
 export function reason(text) {
   return formatNote(text, current);
 }
@@ -2164,7 +2196,7 @@ export function translate(text, vars) {
   return out;
 }
 
-// Hook: komponen ikut tergambar ulang saat bahasa diganti.
+// Hook: components re-render when the language changes.
 const Ctx = createContext('id');
 export function I18nProvider({ children }) {
   const [locale, setL] = useState(getLocale());
@@ -2173,12 +2205,12 @@ export function I18nProvider({ children }) {
     listeners.add(f);
     return () => listeners.delete(f);
   }, []);
-  // AriaI18n menyamakan locale internal React Aria dengan pilihan bahasa di sini,
-  // sehingga arah teks dan format bawaannya ikut. Teks yang dibacakan pembaca layar
-  // ("sortable column", "sorted by column in descending order") tetap Inggris:
-  // React Aria memang tidak mengirim berkas bahasa Indonesia (lihat
-  // node_modules/react-aria/dist/private/intl/table/ — tidak ada id-ID), dan itu
-  // milik pustaka, bukan kamus kita.
+  // AriaI18n aligns React Aria's internal locale with the language choice here,
+  // so text direction and default formats follow. Text read out by screen readers
+  // ("sortable column", "sorted by column in descending order") stays English:
+  // React Aria ships no Indonesian bundle (see
+  // node_modules/react-aria/dist/private/intl/table/ — there is no id-ID), and that
+  // belongs to the library, not to our dictionary.
   return (
     <Ctx.Provider value={locale}>
       <AriaI18n locale={locale === 'en' ? 'en-US' : 'id-ID'}>{children}</AriaI18n>

@@ -4,7 +4,8 @@ import { Search, Check, TriangleAlert, Anchor, ArrowRight } from 'lucide-react';
 import { get, post } from '../api';
 import { useStatus } from '../App';
 import { usePoll } from '../hooks';
-import CandleChart from '../components/CandleChart';
+import CandleChart, { BAND_COLORS } from '../components/CandleChart';
+import { useLadder, LadderStep, LadderPreview } from './ManualLadder';
 import { PageHeader, Notice, PriceRange, Empty, KV, Segmented } from '../components/ui';
 import { orientCandles, TFS, SECS, LiveBadge } from './PositionDetail';
 import { useLivePrice, useLiveCandles } from '../liveCandles';
@@ -226,7 +227,7 @@ function AutoSwap({ p }) {
 // The band follows typing (from percent × current price); once the preview for
 // the same input arrives, the bounds are replaced by the rounded tick prices.
 // Without a preview (amount not yet filled), the current price is taken from the last candle.
-function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag }) {
+function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag, bands = null }) {
   const { t } = useI18n();
   const [tf, setTf] = useState('1h');
   const baseToken = pool.quoteSide === 0 ? pool.token1 : pool.token0;
@@ -247,6 +248,11 @@ function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag
     }
     return nowPrice > 0 ? { lo: nowPrice * (1 + lo / 100), hi: nowPrice * (1 + up / 100) } : null;
   }, [full, rangeOk, preview, nowPrice, lo, up]);
+
+  // Ladder layers: price ratios to the current price -> bands drawn on the chart.
+  const ranges = useMemo(() => (bands && nowPrice > 0
+    ? bands.map((b, i) => ({ id: i, lo: nowPrice * b.lo, hi: nowPrice * b.hi, color: BAND_COLORS[i % 2], label: `L${i + 1}`, selected: true }))
+    : null), [bands, nowPrice]);
 
   // Dragged bounds (prices) -> percent change from the price the band is drawn against.
   const drag = (a, b) => {
@@ -272,7 +278,7 @@ function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag
         <Empty title="Belum ada lilin harga" sub="GeckoTerminal belum punya riwayat harga untuk pool ini." />
       ) : (
         <>
-          <CandleChart key={pool.poolRef} candles={candles} tf={tf} quote={quote} range={range} now={nowPrice} pickRange onRangeDrag={drag} height={300} />
+          <CandleChart key={pool.poolRef} candles={candles} tf={tf} quote={quote} range={range} ranges={ranges} now={nowPrice} pickRange onRangeDrag={drag} height={300} />
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
             {range && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-4 rounded-sm border border-accent/50 bg-accent/15" />{t('rentang yang akan di-LP')} · {t('geser garis atau pita untuk mengubahnya')}</span>}
             {full && <span>{t('Seluruh rentang — tidak ada batas untuk digambar.')}</span>}
@@ -330,7 +336,7 @@ function PoolPicker({ pools, onPick }) {
           className="h-9 w-full rounded-md border border-field-border bg-surface pl-8 pr-3 text-sm outline-none focus:border-accent" />
       </div>
 
-      {/* Alamat token: pool-nya dicari langsung dari chain, bukan dari yang sudah dikenal. */}
+      {/* Token address: the pool is looked up straight from the chain, not from the already known ones. */}
       {isAddress && (!scan || scan.token !== token) && (
         <Button size="sm" onPress={scanning}>{t('Cari pool untuk token ini')}</Button>
       )}
@@ -415,6 +421,7 @@ export default function ManualLp({ param }) {
   const [result, setResult] = useState(null);
   const [balance, setBalance] = useState(null);
   const seq = useRef(0);
+  const [mode, setMode] = useState('single');   // 'single' range | 'ladder' of layers
 
   useEffect(() => {
     get('/api/manual/pools?limit=200').then((d) => setPools(d.pools || []));
@@ -462,7 +469,10 @@ export default function ManualLp({ param }) {
   const empty = !full && lo === 0 && up === 0;
   const inverted = !full && !loBad && !upBad && !empty && up <= lo;
   const rangeOk = full || (!loBad && !upBad && !empty && !inverted);
-  const ready = !!pool && Number.isFinite(usdNum) && usdNum > 0 && rangeOk;
+  const ready = mode === 'single' && !!pool && Number.isFinite(usdNum) && usdNum > 0 && rangeOk;
+  const ladder = useLadder({ pool, usdNum: Number.isFinite(usdNum) ? usdNum : 0, enabled: mode === 'ladder',
+    onOpened: () => { reloadStatus(); loadBalance(pool?.poolRef); } });
+  const stepsDone = mode === 'ladder' ? ladder.ready : ready;
   const body = { poolRef: pool?.poolRef, usd: usdNum, ...(full ? { full: true } : { lowerPct: -lo, upperPct: up }) };
 
   // The preview is recomputed by itself every time a choice changes — there is no "compute"
@@ -575,7 +585,7 @@ export default function ManualLp({ param }) {
             )}
           </Step>
 
-          <Step n={2} title="Nominal" done={ready}>
+          <Step n={2} title="Nominal" done={stepsDone}>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl text-muted">$</span>
@@ -583,9 +593,9 @@ export default function ManualLp({ param }) {
                   inputMode="decimal" placeholder="0" aria-label={t('Nominal posisi')}
                   className="num h-11 w-44 rounded-md border border-field-border bg-surface px-3 text-xl font-semibold outline-none focus:border-accent" />
               </div>
-              {/* "Maks" dihitung dari batas yang benar-benar berlaku, jadi menekannya
-                  tidak pernah mengantar ke penolakan. Nilai yang kebetulan sama
-                  dengan salah satu pilihan cepat dibuang supaya tidak dobel. */}
+              {/* "Max" is computed from the limit that actually applies, so pressing it never
+                  leads to a rejection. A value that happens to equal one of the quick choices
+                  is dropped so it is not duplicated. */}
               <Chips value={usdNum} onPick={(v) => setNotional(String(v))}
                 options={[25, 50, 100, 200].filter((v) => !maxVal || v < maxVal).map((v) => [v, `$${v}`])
                   .concat(maxVal > 0 ? [[maxVal, t('Maks {v}', { v: usd(maxVal, 0) })]] : [])} />
@@ -593,11 +603,20 @@ export default function ManualLp({ param }) {
                 {t('Nilai posisi, bukan jumlah token — bot mengurus sendiri tukar-menukarnya.')}
               </p>
               <Balance saldo={shownBalance} pool={pool} />
-              {pReady?.swaps && <AutoSwap p={pReady} />}
+              {mode === 'single' && pReady?.swaps && <AutoSwap p={pReady} />}
             </div>
           </Step>
 
-          <Step n={3} title="Rentang harga" done={ready}>
+          <Step n={3} title="Rentang harga" done={stepsDone}
+            action={<Segmented size="sm" aria="Mode rentang" value={mode} onChange={setMode}
+              options={[['single', 'Satu rentang'], ['ladder', 'Berlayer']]} />}>
+            {mode === 'ladder' ? (
+              <LadderStep L={ladder} chart={pool && (
+                <ChartRange pool={pool} lo={-ladder.botN} up={-ladder.topN} full={false} rangeOk={ladder.rangeOk} currentPrice={null}
+                  preview={null} bands={ladder.bands}
+                  onDrag={(a, b) => { ladder.setBottom(String(Math.min(99.9, Math.max(0, -a)))); ladder.setTop(String(Math.max(0, -b))); }} />
+              )} />
+            ) : (
             <div className="flex flex-col gap-3">
               {pool && (
                 <ChartRange pool={pool} lo={lo} up={up} full={full} rangeOk={rangeOk} currentPrice={currentPrice}
@@ -618,7 +637,7 @@ export default function ManualLp({ param }) {
                 }}
                 options={[...PRESET.map(([, , l]) => [l, t(l)]), ['full', t('Seluruh rentang')]]} />
               <p className="text-xs text-muted">{t('Klik tanda −/+ untuk memindah batas ke sisi lain harga kini. Rentang yang seluruhnya di bawah harga (misal −30% sampai −10%) hanya diisi aset kuotasi seperti USDG; yang seluruhnya di atas hanya diisi tokennya.')}</p>
-              {/* Batas bebas: mengetik di salah satu kotak otomatis keluar dari "seluruh rentang". */}
+              {/* Free bounds: typing in either box automatically leaves "whole range". */}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Limit label="Batas bawah" aria="Batas bawah dari harga kini (persen)" direction={dirDown} value={full ? '' : lower} disabled={false}
                   onArah={(a) => { setFull(false); setDirDown(a); }}
@@ -655,6 +674,7 @@ export default function ManualLp({ param }) {
                 </div>
               )}
             </div>
+            )}
           </Step>
         </div>
 
@@ -662,10 +682,10 @@ export default function ManualLp({ param }) {
         <Card className="gap-0! p-0! lg:sticky lg:top-4">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">{t('Pratinjau')}</h2>
-            {compute && <Spinner size="sm" />}
+            {(mode === 'ladder' ? ladder.compute : compute) && <Spinner size="sm" />}
           </div>
           <div className="flex flex-col gap-4 p-4">
-            {!ready ? (
+            {mode === 'ladder' ? <LadderPreview L={ladder} dry={dry} /> : !ready ? (
               <p className="text-sm text-muted">{t('Pilih pool dan isi nominalnya — pratinjau muncul sendiri.')}</p>
             ) : plan?.error ? (
               <Notice status="danger" title={t('Belum bisa dibuka')}>{plan.error}</Notice>
@@ -692,9 +712,9 @@ export default function ManualLp({ param }) {
                   {t('Posisi ini tidak mencermin siapa pun — ia tidak akan ikut ditutup saat target keluar.')}
                 </p>
 
-                {/* Di mode simulasi tombolnya TIDAK dimatikan begitu saja: tombol mati
-                    tanpa jalan keluar cuma bikin user menebak. Ia berubah jadi jalan
-                    pintas ke tempat yang bisa mengubah keadaannya. */}
+                {/* In simulation mode the button is NOT just disabled: a dead button with no way
+                    out only makes the user guess. It turns into a shortcut to the place that can
+                    change the situation. */}
                 {dry ? (
                   <Button variant="outline" className="w-full" onPress={() => { location.hash = 'settings'; }}>
                     {t('Nyalakan LIVE dulu')}

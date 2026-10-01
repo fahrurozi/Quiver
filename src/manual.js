@@ -46,6 +46,44 @@ function ticksFromPct({ curTick, quoteSide, lowerPct, upperPct }) {
   const [a, b] = quoteSide === 1 ? [curTick + dDown, curTick + dUp] : [curTick - dUp, curTick - dDown];
   return { tickLower: Math.floor(a), tickUpper: Math.ceil(b) };
 }
+// ---- layered ("ladder") entry ----------------------------------------------
+// One budget spread over several adjacent single-sided ranges BELOW the price: the
+// nearest layer sits just under the price, each next one lies deeper. A layer holds only
+// the quote asset until the price falls into it, so the deeper the price goes the more of
+// the budget is turned into the token, at a lower average price. `method` sets how the
+// budget is weighted from the nearest layer to the deepest one.
+const LADDER_METHODS = {
+  equal: () => 1,
+  linear: (i) => i + 1,           // 1, 2, 3, …
+  grow15: (i) => 1.5 ** i,        // 1, 1.5, 2.25, …
+  double: (i) => 2 ** i,          // 1, 2, 4, …
+};
+const LADDER_MIN_LAYERS = 2, LADDER_MAX_LAYERS = 10;
+
+// topPct / bottomPct: how far BELOW the price the top of the nearest layer and the bottom
+// of the deepest layer are (positive numbers, top < bottom < 100). Layers split that span
+// into equal steps in price ratio. Each layer comes out in planLp's convention:
+// lowerPct = percent below the price, upperPct = signed (negative = below the price).
+function ladderLayers({ usd, topPct = 0, bottomPct, layers, method = 'linear' }) {
+  const top = Number(topPct), bottom = Number(bottomPct), n = Number(layers), total = Number(usd);
+  if (!Number.isFinite(total) || total <= 0) return { error: 'nominal harus angka lebih dari nol' };
+  if (!Number.isInteger(n) || n < LADDER_MIN_LAYERS || n > LADDER_MAX_LAYERS) return { error: `jumlah layer harus ${LADDER_MIN_LAYERS}–${LADDER_MAX_LAYERS}` };
+  if (!LADDER_METHODS[method]) return { error: 'metode layer tidak dikenal' };
+  if (!Number.isFinite(top) || top < 0 || !Number.isFinite(bottom) || bottom >= 100) return { error: 'batas layer harus di antara 0% dan 100% di bawah harga' };
+  if (bottom <= top) return { error: 'batas terdalam harus lebih jauh di bawah harga daripada batas teratas' };
+  const rTop = 1 - top / 100, rBot = 1 - bottom / 100;
+  const edge = (i) => rTop * (rBot / rTop) ** (i / n);
+  const w = Array.from({ length: n }, (_, i) => LADDER_METHODS[method](i));
+  const wSum = w.reduce((a, b) => a + b, 0);
+  const cents = w.map((x) => Math.floor((total * x / wSum) * 100));
+  cents[n - 1] += Math.round(total * 100) - cents.reduce((a, b) => a + b, 0);   // rounding remainder -> deepest
+  return {
+    layers: Array.from({ length: n }, (_, i) => ({
+      n: i + 1, usd: cents[i] / 100,
+      lowerPct: (1 - edge(i + 1)) * 100, upperPct: (edge(i) - 1) * 100,
+    })),
+  };
+}
 function duration(ms) {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s} dtk`;
@@ -104,7 +142,7 @@ class Manual {
     try {
       const slots = await this.chain.slot0V4Many(v4.map((p) => p.poolRef));
       v4.forEach((p, i) => { p.curTick = slots[i]?.tick ?? null; });
-    } catch { /* harga tidak wajib untuk memilih pool */ }
+    } catch { /* the price is not required to pick a pool */ }
     return list;
   }
 
@@ -181,7 +219,7 @@ class Manual {
     // Each v3 venue (Uniswap v3, and PancakeSwap v3 on BSC) has its own factory.
     const factories = [];
     for (const v of this.chain.venues) {
-      try { factories.push([v.key, await this.chain.factoryV3(v.npmV3)]); } catch { /* venue ini dilewati, v4 tetap jalan */ }
+      try { factories.push([v.key, await this.chain.factoryV3(v.npmV3)]); } catch { /* skip this venue, v4 keeps working */ }
     }
     const query = [
       [this.chain.ADDR.poolManager, [TOPIC.initializeV4, null, pad(t), null], serapV4],
@@ -207,12 +245,12 @@ class Manual {
         step += potong;
         onProgress({ done: step, total });
         continue;
-      } catch { /* endpoint menolak rentang sebesar itu — mundur per potongan */ }
+      } catch { /* endpoint rejects a range that large: fall back to chunks */ }
       for (let hi = head; hi > floor;) {
         const lo = Math.max(floor, hi - CHUNK);
         try {
           serap(await this.rpc.getLogs({ address, topics, fromBlock: hex(lo), toBlock: hex(hi) }));
-        } catch { /* satu potongan gagal: jangan menggagalkan seluruh pemindaian */ }
+        } catch { /* one chunk failed: do not fail the whole scan */ }
         step++;
         onProgress({ done: step, total });
         if (lo === 0) break;
@@ -452,6 +490,66 @@ class Manual {
     };
   }
 
+  // Plans every layer of a ladder (see ladderLayers) without sending anything. The limits
+  // planLp checks per position are also checked for the whole ladder: the open-position
+  // count, total exposure and cash.
+  async planLadder({ poolRef, usd, topPct = 0, bottomPct, layers, method = 'linear' }) {
+    const spec = ladderLayers({ usd, topPct, bottomPct, layers, method });
+    if (spec.error) return spec;
+    const eng = this.engine;
+    const rules = eng.rulesFrom(null);
+    const sum = eng.positions.summary(eng.ethUsd);
+    const n = spec.layers.length;
+    if (sum.openCount + n > rules.filters.max_open_positions) {
+      return { error: `${n} layer butuh ${n} posisi, tapi sudah ada ${sum.openCount} terbuka (batas ${rules.filters.max_open_positions}).` };
+    }
+    if (sum.exposureUsd + Number(usd) > rules.sizing.max_total_exposure_usd) {
+      return { error: `total eksposur jadi $${(sum.exposureUsd + Number(usd)).toFixed(2)}, melebihi batas $${rules.sizing.max_total_exposure_usd}.` };
+    }
+    const out = [], warnings = new Set();
+    let first = null;
+    for (const l of spec.layers) {
+      const d = await this.planLp({ poolRef, usd: l.usd, lowerPct: l.lowerPct, upperPct: l.upperPct });
+      if (d.error) return { error: `layer ${l.n}: ${d.error}` };
+      first ||= d.preview;
+      for (const w of d.warnings) warnings.add(w);
+      out.push({ ...l, valueUsd: d.preview.valueUsd, tickLower: d.preview.tickLower, tickUpper: d.preview.tickUpper,
+        lowerPctEff: d.preview.lowerPct, upperPctEff: d.preview.upperPct });
+    }
+    const totalUsd = out.reduce((a, l) => a + l.valueUsd, 0);
+    if (first.walletCashUsd < totalUsd) return { error: `kas cuma $${first.walletCashUsd.toFixed(2)}, butuh ~$${totalUsd.toFixed(2)} untuk ${n} layer` };
+    if (first.walletCashUsd < totalUsd * 1.02) warnings.add('kas nyaris pas — sisakan sedikit untuk gas dan slippage');
+    // Several mints cost several gas fees; the layers are small, so it can matter.
+    warnings.add(`${n} posisi terpisah — tiap layer = satu transaksi mint dan satu biaya gas`);
+    return {
+      layers: out, warnings: [...warnings], method,
+      preview: { pair: first.pair, venue: first.venue, feePct: first.feePct, symbol0: first.symbol0, symbol1: first.symbol1,
+        dec0: first.dec0, dec1: first.dec1, quoteSide: first.quoteSide, curTick: first.curTick,
+        walletCashUsd: first.walletCashUsd, totalUsd },
+    };
+  }
+
+  // Opens a ladder layer by layer, nearest first. Each layer is planned again right before
+  // its mint (fresh price and balances) and the run stops at the first failure: what was
+  // opened stays open and is reported. onProgress({ done, total, note }) after each layer.
+  async openLadder({ poolRef, usd, topPct = 0, bottomPct, layers, method = 'linear' }, onProgress = () => {}) {
+    const spec = ladderLayers({ usd, topPct, bottomPct, layers, method });
+    if (spec.error) return { error: spec.error, opened: [] };
+    const opened = [];
+    for (const l of spec.layers) {
+      try {
+        const d = await this.planLp({ poolRef, usd: l.usd, lowerPct: l.lowerPct, upperPct: l.upperPct });
+        if (d.error) throw new Error(d.error);
+        const r = await this.openLp(d.plan);
+        opened.push({ n: l.n, usd: l.usd, tx: r.txHash, positionId: r.positionId, note: r.note });
+        onProgress({ done: opened.length, total: spec.layers.length, note: r.note });
+      } catch (e) {
+        return { error: `layer ${l.n}/${spec.layers.length}: ${e.message}`, opened };
+      }
+    }
+    return { ok: true, opened };
+  }
+
   // ---- balances & swap simulation -----------------------------------------
   // The gas reserve follows the current gas price (see Executor.gasReserveCached).
   gasReserve() { return this.engine.exec?.gasReserveCached ? this.engine.exec.gasReserveCached() : BigInt(this.engine.cfg.gas?.native_reserve_wei ?? 2_000_000_000_000_000); }
@@ -655,7 +753,7 @@ class Manual {
     if (!Manual.followable(a, new Set())) return { error: 'hanya aksi buka/tambah posisi yang gagal atau dilewati yang bisa diikuti' };
     // A target that has fully exited: our position has no counterpart to follow out.
     let targetLiq = null;
-    try { targetLiq = (await this.engine.targetLiquidity(a.venue, a.token_id))?.liquidity ?? null; } catch { /* tidak terbaca */ }
+    try { targetLiq = (await this.engine.targetLiquidity(a.venue, a.token_id))?.liquidity ?? null; } catch { /* unreadable */ }
     if (targetLiq === 0n) return { error: 'target sudah menutup posisi ini — tidak ada yang bisa diikuti' };
     const toks = await this.chain.tokens([a.token0, a.token1]);
     const rules = this.engine.rulesFrom(a.target);
@@ -761,7 +859,7 @@ class Manual {
     const { pos, error } = this.takeoverRow(id);
     if (error) return { error };
     let liq = null;
-    try { liq = (await this.engine.targetLiquidity(pos.venue, pos.mirror_of))?.liquidity ?? null; } catch { /* tidak terbaca */ }
+    try { liq = (await this.engine.targetLiquidity(pos.venue, pos.mirror_of))?.liquidity ?? null; } catch { /* unreadable */ }
     const e = this.engine.rulesFrom(pos.target).exit;
     return {
       id: pos.id, takeoverTs: pos.takeover_ts, target: pos.target, tokenId: pos.mirror_of,
@@ -829,7 +927,7 @@ class Manual {
   // request hung for minutes.
   seenState(me) {
     let st = { wallet: null, block: 0, tokens: [] };
-    try { st = { ...st, ...JSON.parse(this.store.getState(this.sk('swap_seen'), '{}')) }; } catch { /* mulai dari nol */ }
+    try { st = { ...st, ...JSON.parse(this.store.getState(this.sk('swap_seen'), '{}')) }; } catch { /* start from zero */ }
     return st.wallet === me ? st : { wallet: me, block: 0, tokens: [] };
   }
   seenTokens() {
@@ -1030,11 +1128,11 @@ class Manual {
       const row = this.store.get('SELECT detail FROM txs WHERE hash=?', r.hash);
       const d = row?.detail ? JSON.parse(row.detail) : detail;
       this.store.run('UPDATE txs SET detail=? WHERE hash=?', JSON.stringify({ ...d, amountOut: outgoing }), r.hash);
-    } catch { /* riwayat saja — swap-nya sudah terkirim */ }
+    } catch { /* history only: the swap was already sent */ }
     const note = `${entry.toPrecision(6)} ${mi.symbol} → ${outgoing.toPrecision(6)} ${mo.symbol}`;
     eng.notify(`swap manual: ${note}`);
     return { txHash: r.hash, amountOut: outRaw.toString(), note, dex: r.quote?.dex || null };
   }
 }
 
-module.exports = { ticksFromPct, Manual };
+module.exports = { ticksFromPct, ladderLayers, LADDER_METHODS, Manual };

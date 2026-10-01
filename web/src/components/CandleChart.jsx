@@ -360,7 +360,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
 
   return (
     <div className="relative">
-      {/* legenda OHLC lilin yang disorot (atau lilin terakhir) */}
+      {/* OHLC legend of the highlighted candle (or the last candle) */}
       {h && (
         <div className="num pointer-events-none absolute top-1 left-1 z-10 flex flex-wrap gap-x-2.5 rounded bg-surface/80 px-1.5 py-0.5 text-[0.6875rem] text-muted backdrop-blur-sm">
           <span>{new Date(h.time * 1000).toLocaleString(fmtLocale(), secs >= 86400 ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
@@ -372,7 +372,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
           {quote && <span>{t('dalam {q}', { q: quote })}</span>}
         </div>
       )}
-      {/* skala: otomatis (log kalau rentangnya lebar) / paksa log / linear */}
+      {/* scale: auto (log when the range is wide) / force log / linear */}
       <div className="absolute top-1 right-1 z-10 flex rounded border border-border bg-surface/80 p-0.5 text-[0.6875rem] backdrop-blur-sm" role="group" aria-label={t('Skala harga')}>
         {[['log', 'Log'], ['lin', 'Lin']].map(([id, label]) => {
           const on = (id === 'log') === log;

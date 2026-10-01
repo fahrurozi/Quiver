@@ -8,7 +8,7 @@ const { rulesFor, DEFAULTS, validateRules } = require('./policy');
 const { scoutWallet } = require('./scout');
 const { WalletResearch, summarize } = require('./wallet');
 const { createSettingsRoutes } = require('./settings');
-const { Manual } = require('./manual');
+const { Manual, ladderLayers } = require('./manual');
 const { Compound } = require('./compound');
 const { Holdings } = require('./holdings');
 const { Icons } = require('./icons');
@@ -183,7 +183,7 @@ function checkInitData(initData, botToken, { maxAgeSec = 86400, now = Date.now()
   const ageSec = now / 1000 - authDate;
   if (!authDate || ageSec > maxAgeSec || ageSec < -300) return { error: 'initData kedaluwarsa — tutup lalu buka lagi mini app-nya' };
   let user = null;
-  try { user = JSON.parse(q.get('user') || 'null'); } catch { /* bukan JSON */ }
+  try { user = JSON.parse(q.get('user') || 'null'); } catch { /* not JSON */ }
   if (!user || user.id == null) return { error: 'initData tanpa pengguna' };
   return { user, authDate, look };
 }
@@ -298,7 +298,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       if (a.kind === 'increase') inUsd += v;
       else if (a.kind === 'decrease') outUsd += v;
       else if (a.kind === 'claim') claims++;
-      try { net += BigInt(a.liquidity || 0); } catch { /* aksi tanpa delta L */ }
+      try { net += BigInt(a.liquidity || 0); } catch { /* action without an L delta */ }
     }
     const first = acts[0], last = acts[acts.length - 1];
     out.watch = {
@@ -755,6 +755,12 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
 
   // Pools whose manual LP is being opened (double-click guard, see POST /api/manual/lp/open).
   const manualOpening = new Set();
+  const ladderJobs = new Map();
+  const ladderBody = (b) => ({
+    poolRef: String(b.poolRef || ''), usd: Number(b.usd),
+    topPct: b.topPct != null ? Number(b.topPct) : 0, bottomPct: Number(b.bottomPct),
+    layers: Number(b.layers), method: String(b.method || 'linear'),
+  });
   const routes = {
     'GET /api/overview': async () => {
       // Cash is re-read if a tx has landed in a block since the last read (see
@@ -1426,7 +1432,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         try {
           const raw = (await engine.exec.balances([a])).get(a) || 0n;
           balance = { raw: raw.toString(), amount: Number(raw) / 10 ** meta.decimals };
-        } catch { /* saldo tidak terbaca: bagian itu disembunyikan */ }
+        } catch { /* balance unreadable: hide that part */ }
       }
 
       return {
@@ -1476,7 +1482,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       const quoteSide = quoteSideOf(pool.token0, pool.token1);
       // Current price: v4 = poolId (32 bytes) read from the PoolManager, v3 = pool address.
       let slot = null;
-      try { slot = ref.length === 66 ? (await chain.slot0V4Many([ref]))[0] : await chain.slot0V3(ref); } catch { /* tanpa harga kini */ }
+      try { slot = ref.length === 66 ? (await chain.slot0V4Many([ref]))[0] : await chain.slot0V3(ref); } catch { /* no current price */ }
       const rows = await lpRows('pool_ref=?', [ref]);
       // The range of a researched position still open is drawn against the current price. One that
       // already carries a tick from re-valuation is left alone — that is the tick used to
@@ -1819,7 +1825,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         try {
           const slots = await chain.slot0V4Many(idV4);
           idV4.forEach((id, i) => byPool.set(id, slots[i]));
-        } catch { /* harga kini tidak terbaca: bar tetap tampil tanpa penanda */ }
+        } catch { /* current price unreadable: the bar still renders without the marker */ }
       }
       for (const a of [...new Set(need.filter((r) => r.venue === 'v3').map((r) => r.pool_ref))]) {
         try { byPool.set(a, await chain.slot0V3(a)); } catch { /* sama */ }
@@ -1955,6 +1961,37 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
         tickUpper: b.tickUpper != null ? Math.round(Number(b.tickUpper)) : null,
         full: !!b.full,
       });
+    },
+    // Layered entry: one budget over several adjacent ranges below the price (see manual.ladderLayers).
+    'POST /api/manual/ladder/plan': async (req) => {
+      const b = await readBody(req);
+      return manual.planLadder(ladderBody(b));
+    },
+    // Opening takes one transaction per layer, longer than a proxy waits for a reply, so it
+    // runs as a job: this returns a job id and the dashboard polls GET /api/manual/ladder/job.
+    'POST /api/manual/ladder/open': async (req) => {
+      const b = await readBody(req);
+      if (engine.dryRun() || !engine.exec.address()) return { error: 'mode simulasi: tidak mengirim transaksi' };
+      const lockKey = String(b.poolRef || '').toLowerCase();
+      if (manualOpening.has(lockKey)) return { error: 'pembukaan LP di pool ini masih diproses — tunggu hasilnya' };
+      const args = ladderBody(b);
+      const spec = ladderLayers(args);
+      if (spec.error) return spec;
+      manualOpening.add(lockKey);
+      const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      const job = { status: 'running', done: 0, total: spec.layers.length, opened: [], error: null };
+      ladderJobs.set(id, job);
+      // keep the last few jobs only
+      for (const k of [...ladderJobs.keys()].slice(0, Math.max(0, ladderJobs.size - 20))) ladderJobs.delete(k);
+      manual.openLadder(args, (p) => { job.done = p.done; })
+        .then((r) => { job.opened = r.opened; job.error = r.error || null; job.status = r.error ? 'error' : 'done'; })
+        .catch((e) => { log(`LP berlayer: ${e.message}`); job.error = e.message; job.status = 'error'; })
+        .finally(() => manualOpening.delete(lockKey));
+      return { job: id, total: job.total };
+    },
+    'GET /api/manual/ladder/job': async (req, url) => {
+      const j = ladderJobs.get(url.searchParams.get('id') || '');
+      return j ? { ...j } : { error: 'job tidak ditemukan' };
     },
     'POST /api/manual/lp/open': async (req) => {
       const b = await readBody(req);
