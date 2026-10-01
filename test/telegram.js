@@ -126,6 +126,7 @@ function build({ chats = [CHAT], dryRun = true, initLogs = [], kosong: blank = [
     executeEntry: async function (plan, act) { this.opened.push({ plan, act }); return { txHash: '0xmint', positionId: 9, note: 'USDG/MEME $50,00' }; },
     kyber: {
       quote: async (a, b, amt) => ({ amountOut: BigInt(amt) * 2n, usdIn: 50, usdOut: 49.5, dex: 'uji-dex', routeSummary: {} }),
+      scan: async function (a, b, amt) { const q = await this.quote(a, b, amt); return [{ id: 'kyber', label: 'Kyber', state: q ? 'ok' : 'noroute', q, ms: 1 }]; },
       swap: async function (a, b, amt) { return { hash: '0xswap', amountOut: BigInt(amt) * 2n, quote: { dex: 'uji-dex', usdIn: 50, usdOut: 49.5 } }; },
     },
   };
