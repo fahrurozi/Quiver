@@ -288,7 +288,9 @@ Chain.prototype.ethUsd = async function ethUsd(fallback = 2500) {
     const head = await this.rpc.blockNumber();
     const pools = await this.findEthUsdgPools(head);
     const noHook = pools.filter((p) => /^0x0+$/.test(p.hooks));
-    const list = (noHook.length ? noHook : pools).slice(0, 8);
+    // Every hookless pool is read (one batch each for slot0 and liquidity): a cap of 8
+    // in scan order used to drop the low-fee pools that carry the most reliable price.
+    const list = (noHook.length ? noHook : pools).slice(0, 24);
     if (!list.length) return fallback;
     const slots = await this.slot0V4Many(list.map((p) => p.poolId));
     // pick the pool with the largest liquidity
@@ -311,7 +313,7 @@ Chain.prototype.ethUsd = async function ethUsd(fallback = 2500) {
     });
     const pick = Chain.pickEthPrice(cands);
     if (!pick) return fallback;
-    if (pick.outlier) this.log(`harga ETH: pool terdalam $${pick.outlier.toFixed(0)} menyimpang dari pool lain — dipakai median $${pick.price.toFixed(0)}`);
+    if (pick.outlier) this.log(`harga ETH: pool acuan $${pick.outlier.toFixed(0)} menyimpang dari pool lain — dipakai median $${pick.price.toFixed(0)}`);
     this._ethUsd = pick.price; this._ethUsdAt = now; this._ethPoolId = pick.poolId;
     return pick.price;
   } catch { return fallback; }
@@ -353,14 +355,35 @@ Chain.prototype.ethUsdFromV3Pools = async function ethUsdFromV3Pools(fallback, n
   } catch { return this._ethUsd ?? fallback; }
 };
 
-// ETH price from the list of candidate pools: the deepest pool, UNLESS its price deviates > 3%
-// from the median of the three deepest pools — one pool that was just swept (or misread from a
-// lagging node) must not shift all the dollar limits, position sizes, and PnL.
-// Returns { price, poolId, outlier } — outlier = the price of the deepest pool that was rejected.
+// ETH price from the list of candidate pools.
+//
+// A pool's price is only pinned to the market within its own fee: arbitrage pays only once the
+// price is more than `fee` away, so a 2.5%-fee pool can sit 2.5% off for hours. On 2026-10-01 the
+// deepest hookless ETH/USDG pool (2.5% fee) read $2,751 while the market and the 0.0021%-fee pool
+// read ~$2,690 — every ETH balance, ETH-quoted position and dollar limit was ~2% too high.
+// So among the pools with real liquidity (at least MIN_DEPTH_SHARE of the deepest), the one with
+// the LOWEST fee sets the price; depth breaks ties. Candidates without a known fee (BSC v3pools
+// mode) all tie on fee, which keeps the old deepest-first rule there.
+//
+// The outlier fence stays: if the chosen pool is > 3% away from the median of the three
+// deepest pools (just swept, or misread from a lagging node), that median is used instead.
+// Returns { price, poolId, outlier } — outlier = the price of the chosen pool that was rejected.
+const MIN_DEPTH_SHARE = 100n;   // 1/100 of the deepest pool's active liquidity
+const feeOf = (c) => {
+  const f = Number(c.p?.fee);
+  return Number.isFinite(f) && f >= 0 && f < 1_000_000 ? f : null;   // 0x800000 = dynamic: unknown
+};
 Chain.pickEthPrice = function pickEthPrice(cands) {
   if (!cands.length) return null;
-  const top = [...cands].sort((a, b) => (a.L > b.L ? -1 : a.L < b.L ? 1 : 0)).slice(0, 3);
-  const best = top[0];
+  const byDepth = [...cands].sort((a, b) => (a.L > b.L ? -1 : a.L < b.L ? 1 : 0));
+  const maxL = byDepth[0].L;
+  const deep = byDepth.filter((c) => c.L * MIN_DEPTH_SHARE >= maxL);
+  const best = [...deep].sort((a, b) => {
+    const fa = feeOf(a), fb = feeOf(b);
+    if (fa !== fb) return fa == null ? 1 : fb == null ? -1 : fa - fb;
+    return a.L > b.L ? -1 : a.L < b.L ? 1 : 0;
+  })[0];
+  const top = byDepth.slice(0, 3);
   if (top.length < 3) return { price: best.price, poolId: best.p.poolId, outlier: null };
   const median = [...top].sort((a, b) => a.price - b.price)[1];
   if (Math.abs(best.price - median.price) / median.price <= 0.03) return { price: best.price, poolId: best.p.poolId, outlier: null };

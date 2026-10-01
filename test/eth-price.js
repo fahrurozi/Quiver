@@ -29,6 +29,34 @@ const cand = (price, L, id) => ({ p: { poolId: id }, s: {}, L, price });
     assert.strictEqual(Chain.pickEthPrice([]), null);
   });
 
+  const fcand = (price, L, id, fee) => ({ p: { poolId: id, fee }, s: {}, L, price });
+
+  await t('the lowest-fee pool with real liquidity sets the price — a deeper 2.5%-fee pool can sit 2.5% off (2026-10-01)', () => {
+    // live values from Robinhood: 2.5% fee $2750.85 deepest, 25% fee, 0.0021% fee at ~4% of the depth
+    const r = Chain.pickEthPrice([
+      fcand(2750.85, 878_603_456_670n, 'deep25bps', 25_000), fcand(2690.84, 518_732_829_038n, 'fee25pct', 250_000),
+      fcand(2685.54, 34_187_957_250n, 'tight', 21), fcand(2666.15, 930_109_258n, 'dust', 9111),
+    ]);
+    assert.strictEqual(r.poolId, 'tight');
+    assert.strictEqual(r.price, 2685.54);
+    assert.strictEqual(r.outlier, null);
+  });
+
+  await t('a low-fee pool below 1% of the deepest liquidity is ignored (too thin to trust)', () => {
+    const r = Chain.pickEthPrice([fcand(2500, 10n ** 20n, 'deep', 3000), fcand(2400, 10n ** 17n, 'thin', 100), fcand(2505, 10n ** 19n, 'mid', 3000)]);
+    assert.strictEqual(r.poolId, 'deep');
+  });
+
+  await t('the chosen low-fee pool is still fenced: > 3% from the median of the three deepest → median', () => {
+    const r = Chain.pickEthPrice([fcand(2500, 10n ** 20n, 'a', 3000), fcand(2510, 10n ** 19n, 'b', 3000), fcand(2490, 10n ** 19n, 'c', 3000), fcand(3000, 10n ** 18n, 'tight', 1)]);
+    assert.strictEqual(r.price, 2500); assert.strictEqual(r.outlier, 3000);
+  });
+
+  await t('candidates without a fee (BSC v3pools mode) keep the deepest-first rule', () => {
+    const r = Chain.pickEthPrice([cand(600, 10n ** 20n, 'a'), cand(601, 10n ** 19n, 'b'), cand(599, 10n ** 18n, 'c')]);
+    assert.strictEqual(r.poolId, 'a');
+  });
+
   await t('ethUsd: a pool without active liquidity or with its price at the tick bound is not included; failed read → last value', async () => {
     const store = new Store(':memory:');
     const pools = [{ poolId: '0x' + 'a1'.repeat(32), fee: 500, tickSpacing: 10, hooks: '0x' + '0'.repeat(40) }, { poolId: '0x' + 'b2'.repeat(32), fee: 500, tickSpacing: 10, hooks: '0x' + '0'.repeat(40) }];
