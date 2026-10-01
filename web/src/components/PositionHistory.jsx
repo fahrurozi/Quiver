@@ -285,7 +285,7 @@ export default function PositionHistory({ id, onClose }) {
                       sub={p.costUsd > 0 ? pct((p.feesUsd / p.costUsd) * 100, 2).replace('+', '') : null} />
                     <Stat label="Modal" value={usd(p.costUsd)} sub={closed ? t('hasil {v}', { v: usd(p.outUsd) }) : null} />
                   </div>
-                  <TargetSide p={p} />
+                  <TargetSide p={p} onRefresh={() => setRevision((v) => v + 1)} />
                   <GmgnPanel token={baseTokenOf(p)} />
                   {!closed && <PnlWhy p={p} />}
                   <Cost c={p.cost} cost={p.costUsd} />

@@ -1214,6 +1214,7 @@ const EN = {
 
   // the target's side of our position (bot position drawer)
   'Posisi yang kita tiru': 'The position we mirror',
+  'Perbarui posisi target': 'Refresh the target position',
   'Tidak meniru siapa pun': 'Mirrors nobody',
   'Dia masih di dalam': 'They are still in',
   'Dia sudah keluar': 'They are out',

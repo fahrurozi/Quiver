@@ -589,7 +589,7 @@ export default function PositionDetail({ id }) {
         <div className="grid gap-3">
           {/* The copied wallet's numbers, above this position's numbers — the same question
               is answered in the same place as in the history drawer. */}
-          <TargetSide p={p} className="" />
+          <TargetSide p={p} className="" onRefresh={reload} />
           <Panel title="Posisi ini" bodyClass="px-4 py-1">
             <div className="divide-y divide-border">
               <KV label="Rentang">

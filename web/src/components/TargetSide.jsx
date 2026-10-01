@@ -15,14 +15,46 @@
 //    only — a 'claim' action carries no value, so the result is a floor, not a certain profit.
 // The dollars cannot be compared (our capital is almost never as large as theirs),
 // so what is set side by side is the percentage of each one's capital.
-import { Chip } from '@heroui/react';
-import { Crosshair } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Chip, Button } from '@heroui/react';
+import { Crosshair, RefreshCw } from 'lucide-react';
+import { get, post } from '../api';
 import { Fig, WalletLinks } from './ui';
 import { usd, pct, tone, age, ago, short } from '../fmt';
 import { useI18n } from '../i18n';
 
-export default function TargetSide({ p, className = 'mb-4' }) {
+// Re-scan the target's wallet (incremental), wait for the job, then let the parent reload.
+async function rescanTarget(address) {
+  const r = await post('/api/wallet/scan', { address, mode: 'refresh' });
+  if (r.error) throw new Error(r.error);
+  const deadline = Date.now() + 120000;
+  for (;;) {
+    await new Promise((ok) => setTimeout(ok, 1500));
+    const d = await get('/api/wallet?address=' + address);
+    if (d.job?.status === 'gagal') throw new Error(d.job.error || 'scan failed');
+    if (d.job?.status !== 'jalan' || Date.now() > deadline) return;
+  }
+}
+
+export default function TargetSide({ p, className = 'mb-4', onRefresh }) {
   const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const alive = useRef(true);
+  const refresh = async () => {
+    setBusy(true); setErr(null);
+    try { await rescanTarget(p.target); if (alive.current) await onRefresh?.(); }
+    catch (e) { if (alive.current) setErr(e.message); }
+    finally { if (alive.current) setBusy(false); }
+  };
+  // Refresh once when the block opens, unless the target's position is already closed
+  // (its numbers can no longer change). Keyed on the target position, not on every poll.
+  const settled = p.origin?.mirror?.status === 'closed';
+  useEffect(() => {
+    alive.current = true;
+    if (p.target && !settled) refresh();
+    return () => { alive.current = false; };
+  }, [p.target, p.mirror_of]);  // eslint-disable-line react-hooks/exhaustive-deps
   if (!p.target) {
     return (
       <div className={`rounded-lg border border-border p-3 ${className}`}>
@@ -67,6 +99,10 @@ export default function TargetSide({ p, className = 'mb-4' }) {
             {label || short(p.target)}{nft ? ` · #${nft}` : ''}
           </a>
           <WalletLinks address={p.target} compact />
+          <Button size="sm" variant="ghost" isIconOnly isDisabled={busy} onPress={refresh}
+            aria-label={t('Perbarui posisi target')} title={t('Perbarui posisi target')}>
+            <RefreshCw className={`size-3.5 ${busy ? 'animate-spin' : ''}`} />
+          </Button>
         </span>
       </div>
       {number === 0 ? (!w && (
@@ -82,6 +118,7 @@ export default function TargetSide({ p, className = 'mb-4' }) {
             sub={pnlPct == null ? null : pct(pnlPct, 2)} />}
         </div>
       )}
+      {err && <div className="mt-2 text-xs text-danger">{err}</div>}
       {pnlPct != null && ours != null && (
         <div className="mt-2 text-xs text-muted">
           {t('Target {a} atas modalnya · kita {b} atas modal kita', { a: pct(pnlPct, 2), b: pct(ours, 2) })}
