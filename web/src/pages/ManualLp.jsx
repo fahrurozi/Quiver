@@ -226,7 +226,7 @@ function AutoSwap({ p }) {
 // The band follows typing (from percent × current price); once the preview for
 // the same input arrives, the bounds are replaced by the rounded tick prices.
 // Without a preview (amount not yet filled), the current price is taken from the last candle.
-function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice }) {
+function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag }) {
   const { t } = useI18n();
   const [tf, setTf] = useState('1h');
   const baseToken = pool.quoteSide === 0 ? pool.token1 : pool.token0;
@@ -248,6 +248,13 @@ function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice }) {
     return nowPrice > 0 ? { lo: nowPrice * (1 + lo / 100), hi: nowPrice * (1 + up / 100) } : null;
   }, [full, rangeOk, preview, nowPrice, lo, up]);
 
+  // Dragged bounds (prices) -> percent change from the price the band is drawn against.
+  const drag = (a, b) => {
+    if (!(nowPrice > 0)) return;
+    const r2 = (p) => Math.round((p / nowPrice - 1) * 10000) / 100;
+    onDrag(r2(a), r2(b));
+  };
+
   return (
     <div className="rounded-md border border-border p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -265,9 +272,9 @@ function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice }) {
         <Empty title="Belum ada lilin harga" sub="GeckoTerminal belum punya riwayat harga untuk pool ini." />
       ) : (
         <>
-          <CandleChart key={pool.poolRef} candles={candles} tf={tf} quote={quote} range={range} now={nowPrice} pickRange height={300} />
+          <CandleChart key={pool.poolRef} candles={candles} tf={tf} quote={quote} range={range} now={nowPrice} pickRange onRangeDrag={drag} height={300} />
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-            {range && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-4 rounded-sm border border-accent/50 bg-accent/15" />{t('rentang yang akan di-LP')}</span>}
+            {range && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-4 rounded-sm border border-accent/50 bg-accent/15" />{t('rentang yang akan di-LP')} · {t('geser garis atau pita untuk mengubahnya')}</span>}
             {full && <span>{t('Seluruh rentang — tidak ada batas untuk digambar.')}</span>}
             <span className="ml-auto inline-flex items-center gap-3">
               {live && <LiveBadge />}
@@ -594,7 +601,12 @@ export default function ManualLp({ param }) {
             <div className="flex flex-col gap-3">
               {pool && (
                 <ChartRange pool={pool} lo={lo} up={up} full={full} rangeOk={rangeOk} currentPrice={currentPrice}
-                  preview={pReady && !compute ? pReady : null} />
+                  preview={pReady && !compute ? pReady : null}
+                  onDrag={(a, b) => {
+                    setFull(false);
+                    setLower(String(Math.abs(a))); setDirDown(a > 0 ? 1 : -1);
+                    setUpper(String(Math.abs(b))); setDirUp(b < 0 ? -1 : 1);
+                  }} />
               )}
               <Chips value={full ? 'full' : PRESET.find(([a, b]) => a === lo && b === up)?.[2]}
                 onPick={(v) => {

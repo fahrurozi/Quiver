@@ -1855,6 +1855,7 @@ const EN = {
   'Harga dibaca langsung dari pool tiap {s} detik': 'Price read straight from the pool every {s} seconds',
   'batas bawah': 'lower',
   'rentang yang akan di-LP': 'range to provide liquidity in',
+  'geser garis atau pita untuk mengubahnya': 'drag a line or the band to change it',
   'Seluruh rentang — tidak ada batas untuk digambar.': 'Full range — no bounds to draw.',
   'harga dalam {q}': 'price in {q}',
   'Vol': 'Vol',

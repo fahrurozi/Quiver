@@ -124,14 +124,22 @@ function domainOf(cs, o) {
  * entry   : { t(ms), p }  exit : { t(ms), p }  now : current price — all optional
  * pickRange : the range being chosen (manual LP) — both its bounds always enter
  *             the axis, however wide, and get a price label on the axis
+ * onRangeDrag : (lo, hi) => void — with pickRange, the band can be dragged: an edge
+ *             moves that bound, the inside moves the whole band
  * height  : height in px
  */
-export default function CandleChart({ candles, tf, quote, range = null, ranges = null, onRangeClick = null, entry = null, exit = null, now = null, bep = null, pickRange = false, height = 384 }) {
+export default function CandleChart({ candles, tf, quote, range = null, ranges = null, onRangeClick = null, onRangeDrag = null, entry = null, exit = null, now = null, bep = null, pickRange = false, height = 384 }) {
   const box = useRef(null);
   const ref = useRef(null);            // { chart, series, vol, overlay, markers }
   // Bands & the click handler are read from a ref by the click subscription installed once.
   const bandsRef = useRef({ ranges, onRangeClick });
   bandsRef.current = { ranges, onRangeClick };
+  // Same for the draggable range: the pointer handlers are installed once.
+  const dragRef = useRef({});
+  dragRef.current.range = pickRange ? range : null;
+  dragRef.current.cb = onRangeDrag;
+  const frozenDom = useRef(null);          // axis bounds held while a drag is in progress
+  const [dragging, setDragging] = useState(false);
   const [hover, setHover] = useState(null);
   const [scale, setScale] = useState(null);   // null = automatic
   const [pal, setPal] = useState(palette);
@@ -224,7 +232,75 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
     chart.subscribeClick(onClick);
     chart.subscribeCrosshairMove(onHover);
     ref.current = { chart, series, vol, overlay, markers, lines: [], dom: null };
-    return () => { chart.unsubscribeCrosshairMove(onMove); chart.unsubscribeCrosshairMove(onHover); chart.unsubscribeClick(onClick); chart.remove(); ref.current = null; };
+
+    // Drag the range being chosen. Pointer events fire before the mouse/touch events the
+    // chart listens to, so pan/zoom is switched off for the length of the drag. Moves
+    // work in pixels, so linear and log scales behave the same.
+    const EDGE_PX = 7;
+    const yClamp = (py) => Math.max(0, Math.min(el.clientHeight, py));
+    const hit = (ev) => {
+      const { range: rg, cb } = dragRef.current;
+      if (!rg || !cb) return null;
+      const rect = el.getBoundingClientRect();
+      const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+      if (px < 0 || px > chart.paneSize().width) return null;
+      const yHi = series.priceToCoordinate(rg.hi), yLo = series.priceToCoordinate(rg.lo);
+      if (yHi == null || yLo == null) return null;
+      const dHi = Math.abs(py - yHi), dLo = Math.abs(py - yLo);
+      if (Math.min(dHi, dLo) <= EDGE_PX) return { mode: dHi <= dLo ? 'hi' : 'lo', py, yHi, yLo };
+      if (py > yHi && py < yLo) return { mode: 'move', py, yHi, yLo };
+      return null;
+    };
+    const onDown = (ev) => {
+      if (ev.button !== 0) return;
+      const h = hit(ev); if (!h) return;
+      dragRef.current.drag = h;
+      frozenDom.current = ref.current.dom;
+      el.setPointerCapture?.(ev.pointerId);
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+      el.style.cursor = h.mode === 'move' ? 'grabbing' : 'ns-resize';
+      setDragging(true);
+    };
+    const onPtrMove = (ev) => {
+      const d = dragRef.current.drag;
+      if (!d) {
+        const h = dragRef.current.range ? hit(ev) : null;
+        if (h || dragRef.current.hovered) el.style.cursor = h ? (h.mode === 'move' ? 'grab' : 'ns-resize') : '';
+        dragRef.current.hovered = !!h;
+        return;
+      }
+      const rg = dragRef.current.range; if (!rg) return;
+      const rect = el.getBoundingClientRect();
+      const py = yClamp(ev.clientY - rect.top);
+      const toP = (yy) => series.coordinateToPrice(yy);
+      let lo = rg.lo, hi = rg.hi;
+      if (d.mode === 'hi') hi = toP(py);
+      else if (d.mode === 'lo') lo = toP(py);
+      else {
+        // keep the whole band inside the pane while moving
+        const dy = Math.max(-d.yHi, Math.min(el.clientHeight - d.yLo, py - d.py));
+        hi = toP(d.yHi + dy); lo = toP(d.yLo + dy);
+      }
+      if (!(lo > 0 && hi > 0 && hi > lo)) return;
+      dragRef.current.cb(lo, hi);
+      // the band moved, so the next move starts from where it is now
+      if (d.mode === 'move') { d.py = py; d.yHi = series.priceToCoordinate(hi) ?? d.yHi; d.yLo = series.priceToCoordinate(lo) ?? d.yLo; }
+    };
+    const onUp = (ev) => {
+      if (!dragRef.current.drag) return;
+      dragRef.current.drag = null;
+      el.releasePointerCapture?.(ev.pointerId);
+      chart.applyOptions({ handleScroll: true, handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true } });
+      el.style.cursor = '';
+      frozenDom.current = null;
+      setDragging(false);
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onPtrMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    return () => { el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointermove', onPtrMove); el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp);
+      chart.unsubscribeCrosshairMove(onMove); chart.unsubscribeCrosshairMove(onHover); chart.unsubscribeClick(onClick); chart.remove(); ref.current = null; };
   }, []);
 
   // Colours follow the theme.
@@ -248,7 +324,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
   // Data, scale, and the position layer.
   useEffect(() => {
     const r = ref.current; if (!r) return;
-    r.dom = dom;
+    r.dom = frozenDom.current || dom;
     r.series.setData(data);
     r.vol.setData(data.map((d) => ({ time: d.time, value: d.value, color: withAlpha(d.close >= d.open ? pal.up : pal.down, 0.28) })));
     for (const l of r.lines) r.series.removePriceLine(l);
@@ -276,7 +352,7 @@ export default function CandleChart({ candles, tf, quote, range = null, ranges =
       r.chart.timeScale().applyOptions({ rightOffset: 3 });
       fittedTf.current = tf;
     }
-  }, [data, tf, dom, entry?.p, exit?.p, entryT, exitT, entryBefore, now, bep, range, ranges, pickRange, pal]);
+  }, [data, tf, dom, entry?.p, exit?.p, entryT, exitT, entryBefore, now, bep, range, ranges, pickRange, pal, dragging]);
 
   const last = data[data.length - 1];
   const h = hover || (last && { ...last, v: last.value });
