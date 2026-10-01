@@ -42,7 +42,7 @@ const ROBINHOOD = {
   venues: [
     { key: 'v3', npmV3Slot: 'npmV3', factory: null },
   ],
-  nativeUsd: { mode: 'v4pool' }, // find the deepest native/usdg v4 pool (pools.js Chain#ethUsd)
+  nativeUsd: { mode: 'global' }, // global spot price (Coinbase/Binance/CoinGecko median); falls back to the native/usdg v4 pools (pools.js Chain#ethUsd)
   verified: true, // addresses verified directly from the chain + Blockscout (see git log)
   explorerApiV2: 'https://robinhoodchain.blockscout.com/api/v2',
   explorerTokenUrl: (a) => `https://robinhoodchain.blockscout.com/token/${a}?tab=holders`,

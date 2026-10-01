@@ -277,13 +277,41 @@ Chain.prototype.findEthUsdgPools = async function findEthUsdgPools(headBlock, bl
   return old || found;
 };
 
+// Global spot ETH/USD sources, queried in parallel; the median of the answers is the price.
+const GLOBAL_ETH_SOURCES = [
+  ['https://api.coinbase.com/v2/prices/ETH-USD/spot', (j) => j?.data?.amount],
+  ['https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT', (j) => j?.price],
+  ['https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', (j) => j?.ethereum?.usd],
+];
+
+// Median of the sane prices the global sources return; null if none answered.
+Chain.globalEthPrice = async function globalEthPrice(fetchImpl = globalThis.fetch) {
+  const got = await Promise.all(GLOBAL_ETH_SOURCES.map(async ([url, pick]) => {
+    try {
+      const r = await fetchImpl(url, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) return null;
+      const v = Number(pick(await r.json()));
+      return v > 100 && v < 100_000 ? v : null;
+    } catch { return null; }
+  }));
+  const ok = got.filter((v) => v != null).sort((a, b) => a - b);
+  if (!ok.length) return null;
+  return ok.length % 2 ? ok[(ok.length - 1) / 2] : (ok[ok.length / 2 - 1] + ok[ok.length / 2]) / 2;
+};
+
 Chain.prototype.ethUsd = async function ethUsd(fallback = 2500) {
   const now = Date.now();
   if (this._ethUsd && now - this._ethUsdAt < 60_000) return this._ethUsd;
+  // 'global' mode: the market price from public APIs; if none answers, fall through to the
+  // on-chain pools below so the price never goes missing.
+  if (this.nativeUsdMode === 'global') {
+    const g = await Chain.globalEthPrice();
+    if (g) { this._ethUsd = g; this._ethUsdAt = now; return g; }
+  }
   // Chains whose native price is read from specific v3 pools (BSC: PancakeSwap v3
   // USDT/WBNB) — see ethUsdFromV3Pools. 'manual' mode: price from the config only.
   if (this.nativeUsdMode === 'v3pools') return this.ethUsdFromV3Pools(fallback, now);
-  if (this.nativeUsdMode !== 'v4pool') return this._ethUsd ?? fallback;
+  if (this.nativeUsdMode !== 'v4pool' && this.nativeUsdMode !== 'global') return this._ethUsd ?? fallback;
   try {
     const head = await this.rpc.blockNumber();
     const pools = await this.findEthUsdgPools(head);

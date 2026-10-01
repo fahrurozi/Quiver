@@ -81,10 +81,35 @@ const cand = (price, L, id) => ({ p: { poolId: id }, s: {}, L, price });
       }),
     };
     const chain = new Chain(rpc, store, () => {});
+    chain.nativeUsdMode = 'v4pool';   // this case exercises the on-chain read
     const p1 = await chain.ethUsd(1);
     assert.ok(Math.abs(p1 - 2500) < 1, String(p1));
     chain._ethUsdAt = 0; mode = 'gagal';
     assert.strictEqual(await chain.ethUsd(p1), p1, 'failed read: the caller passes the last value as a fallback');
+  });
+
+  const resp = (j, ok = true) => ({ ok, json: async () => j });
+  const fetchOf = (map) => async (url) => { const k = Object.keys(map).find((h) => url.includes(h)); if (!k || map[k] === 'down') throw new Error('down'); return resp(map[k]); };
+
+  await t('global price: the median of the sources that answer; garbage and dead sources are skipped', async () => {
+    const all = { coinbase: { data: { amount: '2699.7' } }, binance: { price: '2700.00' }, coingecko: { ethereum: { usd: 2697 } } };
+    assert.strictEqual(await Chain.globalEthPrice(fetchOf(all)), 2699.7);
+    assert.strictEqual(await Chain.globalEthPrice(fetchOf({ ...all, binance: 'down' })), (2699.7 + 2697) / 2);
+    assert.strictEqual(await Chain.globalEthPrice(fetchOf({ ...all, coinbase: { data: { amount: '0' } }, binance: 'down' })), 2697);
+    assert.strictEqual(await Chain.globalEthPrice(fetchOf({ coinbase: 'down', binance: 'down', coingecko: 'down' })), null);
+  });
+
+  await t('global mode: the global price wins over the pools; with no answer it falls back to the on-chain read', async () => {
+    const store = new Store(':memory:');
+    const chain = new Chain({ blockNumber: async () => { throw new Error('rpc down'); } }, store, () => {});
+    assert.strictEqual(chain.nativeUsdMode, 'global');
+    const real = Chain.globalEthPrice;
+    try {
+      Chain.globalEthPrice = async () => 2699.5;
+      assert.strictEqual(await chain.ethUsd(1), 2699.5);
+      chain._ethUsd = 0; Chain.globalEthPrice = async () => null;
+      assert.strictEqual(await chain.ethUsd(1234), 1234, 'no global answer and no pools: the caller fallback');
+    } finally { Chain.globalEthPrice = real; }
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
