@@ -34,6 +34,17 @@ function edges(top, bottom, n) {
   return Array.from({ length: n + 1 }, (_, i) => rTop * (rBot / rTop) ** (i / n));
 }
 
+// Budget per layer, same weights and rounding as the server (manual.ladderLayers): shown
+// at once, while the plan is still being fetched.
+const WEIGHT = { equal: () => 1, linear: (i) => i + 1, grow15: (i) => 1.5 ** i, double: (i) => 2 ** i };
+function split(total, n, method) {
+  const w = Array.from({ length: n }, (_, i) => WEIGHT[method](i));
+  const sum = w.reduce((a, b) => a + b, 0);
+  const cents = w.map((x) => Math.floor((total * x / sum) * 100));
+  cents[n - 1] += Math.round(total * 100) - cents.reduce((a, b) => a + b, 0);
+  return cents.map((c) => c / 100);
+}
+
 export function useLadder({ pool, usdNum, enabled, onOpened }) {
   const [top, setTop] = useState('0');
   const [bottom, setBottom] = useState('60');
@@ -51,8 +62,9 @@ export function useLadder({ pool, usdNum, enabled, onOpened }) {
   const bands = useMemo(() => {
     if (!rangeOk) return null;
     const e = edges(topN, botN, layers);
-    return e.slice(0, -1).map((hi, i) => ({ hi, lo: e[i + 1] }));
-  }, [rangeOk, topN, botN, layers]);
+    const amounts = usdNum > 0 ? split(usdNum, layers, method) : null;
+    return e.slice(0, -1).map((hi, i) => ({ hi, lo: e[i + 1], usd: amounts ? amounts[i] : null }));
+  }, [rangeOk, topN, botN, layers, method, usdNum]);
 
   useEffect(() => {
     setConfirm(false);
@@ -141,6 +153,17 @@ export function LadderStep({ L, chart }) {
         <NumBox label="Layer terdalam berakhir (di bawah harga)" value={L.bottom} onChange={L.setBottom} invalid={!L.rangeOk} hint={L.rangeOk ? px(L.botN) : ''} />
       </div>
       {!L.rangeOk && <p className="text-xs text-danger">{t('Batas terdalam harus lebih jauh di bawah harga daripada layer terdekat, dan kurang dari 100%.')}</p>}
+      {L.bands?.[0]?.usd != null && (
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+          {L.bands.map((b, i) => (
+            <div key={i} className="rounded-md border border-border px-2.5 py-1.5">
+              <div className="text-[0.6875rem] text-muted">{t('Layer {n}', { n: i + 1 })}</div>
+              <div className="num text-sm font-semibold">{usd(b.usd)}</div>
+              <div className="num text-[0.6875rem] text-muted">−{num((1 - b.hi) * 100, 1)}% … −{num((1 - b.lo) * 100, 1)}%</div>
+            </div>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted">{t('Semua layer ada di bawah harga kini, jadi hanya aset kuotasi (misal USDG) yang disetor — tanpa swap. Dana di sebuah layer baru berubah jadi token saat harga turun menembus layer itu.')}</p>
     </div>
   );

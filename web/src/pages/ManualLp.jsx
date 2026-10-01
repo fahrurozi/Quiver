@@ -251,7 +251,7 @@ function ChartRange({ pool, lo, up, full, rangeOk, preview, currentPrice, onDrag
 
   // Ladder layers: price ratios to the current price -> bands drawn on the chart.
   const ranges = useMemo(() => (bands && nowPrice > 0
-    ? bands.map((b, i) => ({ id: i, lo: nowPrice * b.lo, hi: nowPrice * b.hi, color: BAND_COLORS[i % 2], label: `L${i + 1}`, selected: true }))
+    ? bands.map((b, i) => ({ id: i, lo: nowPrice * b.lo, hi: nowPrice * b.hi, color: BAND_COLORS[i % 2], label: b.usd != null ? `L${i + 1} · ${usd(b.usd)}` : `L${i + 1}`, selected: true }))
     : null), [bands, nowPrice]);
 
   // Dragged bounds (prices) -> percent change from the price the band is drawn against.
