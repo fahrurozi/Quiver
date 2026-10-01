@@ -67,17 +67,36 @@ class SwapRouter {
   active() { return this.order().map((id) => this.byId.get(id)).filter((a) => a.enabled()); }
   enabled() { return this.active().length > 0; }
 
+  async timedQuote(a, tokenIn, tokenOut, amountIn) {
+    const t0 = Date.now();
+    const q = await withTimeout(a.quote(tokenIn, tokenOut, amountIn).catch(() => null), QUOTE_TIMEOUT_MS);
+    return { id: a.id, q, ms: Date.now() - t0 };
+  }
+
   // Every enabled aggregator's quote, best first: [{ id, q, ms }]. Missing routes are left out.
   async quoteAll(tokenIn, tokenOut, amountIn) {
-    const list = this.active();
     const rank = new Map(this.order().map((id, i) => [id, i]));
-    const res = await Promise.all(list.map(async (a) => {
-      const t0 = Date.now();
-      const q = await withTimeout(a.quote(tokenIn, tokenOut, amountIn).catch(() => null), QUOTE_TIMEOUT_MS);
-      return { id: a.id, q, ms: Date.now() - t0 };
-    }));
+    const res = await Promise.all(this.active().map((a) => this.timedQuote(a, tokenIn, tokenOut, amountIn)));
     return res.filter((r) => r.q && r.q.amountOut > 0n)
       .sort((x, y) => (y.q.amountOut > x.q.amountOut ? 1 : y.q.amountOut < x.q.amountOut ? -1 : rank.get(x.id) - rank.get(y.id)));
+  }
+
+  // Quote of one chosen aggregator (null when it is off or has no route).
+  async quoteOne(id, tokenIn, tokenOut, amountIn) {
+    const a = this.byId.get(id);
+    if (!a || !a.enabled()) return null;
+    return (await this.timedQuote(a, tokenIn, tokenOut, amountIn)).q;
+  }
+
+  // The Swap page's scan: one row per aggregator, in configured order, whether or not it can
+  // quote. state: 'ok' (has a route), 'noroute', or 'off' (blocker says why).
+  async scan(tokenIn, tokenOut, amountIn) {
+    return Promise.all(this.order().map(async (id) => {
+      const a = this.byId.get(id);
+      if (!a.enabled()) return { id, label: a.label, state: 'off', blocker: a.blocker() || 'dimatikan', q: null, ms: null };
+      const r = await this.timedQuote(a, tokenIn, tokenOut, amountIn);
+      return { id, label: a.label, state: r.q && r.q.amountOut > 0n ? 'ok' : 'noroute', blocker: null, q: r.q, ms: r.ms };
+    }));
   }
 
   async quote(tokenIn, tokenOut, amountIn) {
@@ -97,9 +116,16 @@ class SwapRouter {
     }
   }
 
+  // opts.only = an aggregator id: use exactly that one, no fallback to the others (the Swap
+  // page lets the user pick a route; silently swapping elsewhere would defeat the choice).
   async swap(tokenIn, tokenOut, amountIn, opts = {}) {
     let candidates;
-    if (this.mode() === 'best') {
+    if (opts.only) {
+      const a = this.byId.get(opts.only);
+      if (!a) throw new Error(`Agregator ${opts.only} tidak dikenal`);
+      if (!a.enabled()) throw new Error(`Agregator ${a.label} tidak aktif (${a.blocker()})`);
+      candidates = [a];
+    } else if (this.mode() === 'best') {
       const ranked = await this.quoteAll(tokenIn, tokenOut, amountIn);
       candidates = ranked.map((r) => this.byId.get(r.id));
       if (ranked.length > 1) {

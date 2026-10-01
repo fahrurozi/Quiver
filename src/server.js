@@ -2061,7 +2061,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       try {
         const raw = await manual.amountRaw(b.tokenIn, b.amount);
         if (raw <= 0n) return { error: 'jumlah nol — saldonya kosong?' };
-        return { ...(await manual.quoteSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw })), amountRaw: raw.toString() };
+        return { ...(await manual.quoteSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw.toString(), aggregator: b.aggregator || 'auto' })), amountRaw: raw.toString() };
       } catch (e) { return { error: e.message }; }
     },
     'POST /api/manual/swap': async (req) => {
@@ -2070,7 +2070,7 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
       try {
         const raw = await manual.amountRaw(b.tokenIn, b.amount);
         if (raw <= 0n) return { error: 'jumlah nol — saldonya kosong?' };
-        const r = await manual.doSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw });
+        const r = await manual.doSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw, aggregator: b.aggregator || 'auto' });
         return { ok: true, tx: r.txHash, note: r.note, dex: r.dex };
       } catch (e) {
         log(`swap manual: ${e.message}`);

@@ -248,6 +248,53 @@ const okxReply = (o = {}) => (u) => {
     assert.deepEqual([o.swaps, l.swaps, z.swaps, k.swaps], [1, 1, 1, 1]);
   });
 
+  await t('scan: one row per aggregator in order — ok, noroute and off with the reason', async () => {
+    const off = { ...stub('okx', 1n), enabled: () => false, blocker: () => 'butuh API key' };
+    const rows = await routerOf([stub('kyber', 100n), off, stub('lifi', null)]).scan(ADDR.usdg, MEME, 1n);
+    assert.deepEqual(rows.map((r) => [r.id, r.state]), [['kyber', 'ok'], ['okx', 'off'], ['lifi', 'noroute']]);
+    assert.equal(rows[1].blocker, 'butuh API key');
+    assert.equal(rows[0].q.amountOut, 100n);
+  });
+
+  await t('only: swaps through the chosen aggregator alone, never falls back', async () => {
+    const k = stub('kyber', 100n), o = stub('okx', 130n, 'loss'), l = stub('lifi', 120n);
+    const r = routerOf([k, o, l]);
+    assert.equal((await r.swap(ADDR.usdg, MEME, 1n, { only: 'lifi' })).hash, '0xlifi');
+    assert.equal(k.swaps + o.swaps, 0);
+    await assert.rejects(r.swap(ADDR.usdg, MEME, 1n, { only: 'okx' }), (e) => !!e.loss);
+    assert.equal(k.swaps + l.swaps, 1);
+    const off = { ...stub('zerox', 1n), enabled: () => false, blocker: () => 'dimatikan' };
+    await assert.rejects(routerOf([k, off]).swap(ADDR.usdg, MEME, 1n, { only: 'zerox' }), /tidak aktif/);
+    await assert.rejects(r.swap(ADDR.usdg, MEME, 1n, { only: 'nope' }), /tidak dikenal/);
+  });
+
+  await t('Swap page quote: auto = best route inside the loss limit; a chosen one is shown as is', async () => {
+    const { Manual } = require('../src/manual');
+    const q = (out, usdOut) => ({ amountOut: BigInt(out), usdIn: 100, usdOut, dex: 'x' });
+    const rows = [
+      { id: 'kyber', label: 'Kyber', state: 'ok', q: q(100e6, 90), ms: 5 },       // most output, 10% loss
+      { id: 'okx', label: 'OKX', state: 'ok', q: q(95e6, 99), ms: 6 },           // 1% loss
+      { id: 'lifi', label: 'LI.FI', state: 'off', blocker: 'butuh API key', q: null, ms: null },
+      { id: 'zerox', label: '0x', state: 'noroute', q: null, ms: 7 },
+    ];
+    const fake = { engine: { kyber: { scan: async () => rows }, ethUsd: 2500,
+      rulesFrom: () => ({ exit: { sell_max_loss_bps: 300 }, swap: { max_slippage_bps: 100 } }) },
+    chain: { tokens: async (l) => l.map(() => ({ symbol: 'X', decimals: 6 })), QUOTES: {} } };
+    const quote = (aggregator) => Manual.prototype.quoteSwap.call(fake, { tokenIn: ME, tokenOut: MEME, amountRaw: 100n, aggregator });
+    const auto = await quote('auto');
+    assert.equal(auto.chosen, 'okx');
+    assert.equal(auto.tooLossy, false);
+    assert.deepEqual(auto.routes.map((r) => [r.id, r.state, r.best]), [['kyber', 'ok', false], ['okx', 'ok', true], ['lifi', 'off', false], ['zerox', 'noroute', false]]);
+    assert.ok(!auto.routes.some((r) => 'q' in r), 'raw quotes stay on the server');
+    const kyber = await quote('kyber');
+    assert.equal(kyber.chosen, 'kyber');
+    assert.equal(kyber.tooLossy, true);
+    assert.match((await quote('lifi')).error, /butuh API key/);
+    assert.match((await quote('zerox')).error, /tidak menemukan rute/);
+    fake.engine.kyber.scan = async () => rows.map((r) => ({ ...r, state: 'noroute', q: null }));
+    assert.match((await quote('auto')).error, /Tidak ada agregator/);
+  });
+
   await t('never a second swap after a tx that may have moved tokens', async () => {
     for (const b of ['pending', 'landed']) {
       const k = stub('kyber', 100n);

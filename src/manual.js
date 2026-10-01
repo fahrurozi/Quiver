@@ -938,30 +938,54 @@ class Manual {
     return raw;
   }
 
-  async quoteSwap({ tokenIn, tokenOut, amountRaw }) {
+  // `aggregator`: 'auto' (default) = the best route among those that stay inside the loss limit,
+  // or an aggregator id to quote exactly that one. Every aggregator's quote comes back in
+  // `routes` so the page can show the whole scan.
+  async quoteSwap({ tokenIn, tokenOut, amountRaw, aggregator = 'auto' }) {
     const eng = this.engine;
     if (lc(tokenIn) === lc(tokenOut)) return { error: 'token masuk dan keluar sama' };
     if (!amountRaw || BigInt(amountRaw) <= 0n) return { error: 'jumlah nol' };
     const [mi, mo] = await this.chain.tokens([tokenIn, tokenOut]);
-    const q = await eng.kyber.quote(tokenIn, tokenOut, BigInt(amountRaw));
-    if (!q) return { error: 'Kyber tidak menemukan rute untuk pasangan ini' };
+    const rows = await eng.kyber.scan(tokenIn, tokenOut, BigInt(amountRaw));
     const { Kyber } = require('./kyber');
     // The exit side is valued on its own if it is a quote asset: without this the "route cost" is empty
     // precisely on the thin tokens whose figure most needs to be seen before pressing swap.
     const qo = this.chain.QUOTES[lc(tokenOut)] || null;
-    const loss = Kyber.lossBps(q, qo && { usdPerOut: qo.kind === 'eth' ? eng.ethUsd : 1, outDecimals: qo.decimals });
+    const ref = qo && { usdPerOut: qo.kind === 'eth' ? eng.ethUsd : 1, outDecimals: qo.decimals };
     const rules = eng.rulesFrom(null);
+    const maxLossBps = rules.exit.sell_max_loss_bps;
+    const outDec = mo.decimals ?? 18;
+    const routes = rows.map((r) => {
+      const loss = r.q ? Kyber.lossBps(r.q, ref) : null;
+      return {
+        id: r.id, label: r.label, state: r.state, blocker: r.blocker, ms: r.ms, dex: r.q?.dex || null,
+        amountOut: r.q ? Number(r.q.amountOut) / 10 ** outDec : null,
+        usdIn: r.q?.usdIn ?? null, usdOut: r.q?.usdOut ?? null, lossBps: loss,
+        tooLossy: loss != null && loss > maxLossBps, q: r.q,
+      };
+    });
+    const have = routes.filter((r) => r.q);
+    const bestOf = (list) => list.reduce((m, r) => (!m || r.q.amountOut > m.q.amountOut ? r : m), null);
+    const best = bestOf(have.filter((r) => !r.tooLossy)) || bestOf(have);
+    const pick = aggregator && aggregator !== 'auto' ? routes.find((r) => r.id === aggregator) : best;
+    const view = routes.map(({ q, ...r }) => ({ ...r, best: r.id === best?.id }));
+    if (!pick || !pick.q) {
+      const why = pick ? (pick.state === 'off' ? `${pick.label} tidak aktif (${pick.blocker})` : `${pick.label} tidak menemukan rute untuk pasangan ini`)
+        : 'Tidak ada agregator yang menemukan rute untuk pasangan ini';
+      return { error: why, routes: view, aggregator };
+    }
     return {
       symbolIn: mi.symbol, symbolOut: mo.symbol,
       amountIn: Number(BigInt(amountRaw)) / 10 ** (mi.decimals ?? 18),
-      amountOut: Number(q.amountOut) / 10 ** (mo.decimals ?? 18),
-      usdIn: q.usdIn, usdOut: q.usdOut, lossBps: loss, dex: q.dex,
-      maxLossBps: rules.exit.sell_max_loss_bps, slippageBps: rules.swap.max_slippage_bps,
-      tooLossy: loss != null && loss > rules.exit.sell_max_loss_bps,
+      amountOut: pick.amountOut,
+      usdIn: pick.usdIn, usdOut: pick.usdOut, lossBps: pick.lossBps, dex: pick.dex,
+      maxLossBps, slippageBps: rules.swap.max_slippage_bps,
+      tooLossy: pick.tooLossy,
+      aggregator: aggregator || 'auto', chosen: pick.id, chosenLabel: pick.label, routes: view,
     };
   }
 
-  async doSwap({ tokenIn, tokenOut, amountRaw }) {
+  async doSwap({ tokenIn, tokenOut, amountRaw, aggregator = 'auto' }) {
     const eng = this.engine;
     if (!eng.exec.address()) throw new Error('belum ada wallet');
     if (eng.dryRun()) throw new Error('mode simulasi: tidak mengirim transaksi');
@@ -973,11 +997,11 @@ class Manual {
     if (eng.selling.has(lockKey)) throw new Error('token ini sedang dijual otomatis — tunggu sebentar');
     if (eng.tokenInEntry?.(lockKey)) throw new Error('token ini sedang dipakai membuka posisi — tunggu entry-nya selesai');
     eng.selling.add(lockKey);
-    try { return await this.doSwapLocked({ tokenIn, tokenOut, amountRaw }); }
+    try { return await this.doSwapLocked({ tokenIn, tokenOut, amountRaw, aggregator }); }
     finally { eng.selling.delete(lockKey); this.emptyAt?.delete(lc(tokenOut)); }
   }
 
-  async doSwapLocked({ tokenIn, tokenOut, amountRaw }) {
+  async doSwapLocked({ tokenIn, tokenOut, amountRaw, aggregator = 'auto' }) {
     const eng = this.engine;
     const rules = eng.rulesFrom(null);
     const [mi, mo] = await this.chain.tokens([tokenIn, tokenOut]);
@@ -989,8 +1013,9 @@ class Manual {
       slippageBps: rules.swap.max_slippage_bps,
       maxLossBps: rules.exit.sell_max_loss_bps,
       kind: 'swap_manual', detail,
+      ...(aggregator && aggregator !== 'auto' ? { only: aggregator } : {}),
     });
-    if (!r) throw new Error('Kyber tidak menemukan rute');
+    if (!r) throw new Error('Tidak ada agregator yang menemukan rute');
     // Result from the receipt; if unreadable (native ETH + a lagging node) use the quote.
     const outRaw = r.amountOut ?? BigInt(r.quote?.amountOut ?? 0);
     const outgoing = Number(outRaw) / 10 ** (mo.decimals ?? 18);

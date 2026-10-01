@@ -484,6 +484,22 @@ function History() {
   );
 }
 
+function RouteRow({ active, disabled, onPress, title, sub, right, best }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onPress}
+      className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition ${active ? 'border-accent bg-accent/5' : 'border-border hover:bg-default/50'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}>
+      <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${active ? 'border-accent' : 'border-border'}`}>
+        {active && <span className="size-2 rounded-full bg-accent" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 text-sm font-medium">{title}{best && <Check className="size-3.5 text-success" />}</span>
+        {sub ? <span className="block truncate text-xs text-muted">{sub}</span> : null}
+      </span>
+      {right}
+    </button>
+  );
+}
+
 export default function Swap() {
   const { t } = useI18n();
   const { status, reload: reloadStatus } = useStatus();
@@ -492,7 +508,8 @@ export default function Swap() {
   const [from, setFrom] = useState('');
   const [ke, setKe] = useState('');
   const [qty, setAmount] = useState('');
-  const [quote, setQuote] = useState(null);
+  const [rawQuote, setQuote] = useState(null);
+  const [agg, setAgg] = useState('auto');   // 'auto' = best route, or an aggregator id
   const [take, setTake] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [sendOrig, setSending] = useState(false);
@@ -547,6 +564,17 @@ export default function Swap() {
   const has = useMemo(() => (tokens || []).filter((x) => x.amount > 0), [tokens]);
   const ready = from && ke && from !== ke && String(qty).trim() !== '';
 
+  // The scan returns every aggregator's quote at once, so picking one is a local switch:
+  // the headline numbers follow the chosen row without asking the server again.
+  const routes = rawQuote?.routes || null;
+  const picked = routes && agg !== 'auto' ? routes.find((r) => r.id === agg) : null;
+  const quote = useMemo(() => {
+    if (!rawQuote || !picked) return rawQuote;
+    if (picked.state !== 'ok') return { ...rawQuote, error: picked.state === 'off' ? `${picked.label}: ${picked.blocker}` : `${picked.label} tidak menemukan rute untuk pasangan ini` };
+    return { ...rawQuote, error: undefined, amountOut: picked.amountOut, usdIn: picked.usdIn, usdOut: picked.usdOut, lossBps: picked.lossBps,
+      tooLossy: picked.tooLossy, dex: picked.dex, chosen: picked.id, chosenLabel: picked.label };
+  }, [rawQuote, picked]);
+
   // The quote is fetched itself every time the choice changes; stale replies are discarded.
   useEffect(() => {
     setConfirm(false);
@@ -554,7 +582,7 @@ export default function Swap() {
     const mine = ++seq.current;
     setTake(true);
     const id = setTimeout(async () => {
-      const r = await post('/api/manual/swap/quote', { tokenIn: from, tokenOut: ke, amount: qty });
+      const r = await post('/api/manual/swap/quote', { tokenIn: from, tokenOut: ke, amount: qty, aggregator: 'auto' });
       if (mine !== seq.current) return;
       setQuote(r); setTake(false);
     }, 450);
@@ -598,7 +626,7 @@ export default function Swap() {
 
   const swap = async () => {
     setSending(true);
-    const r = await post('/api/manual/swap', { tokenIn: from, tokenOut: ke, amount: qty });
+    const r = await post('/api/manual/swap', { tokenIn: from, tokenOut: ke, amount: qty, aggregator: agg });
     setSending(false); setConfirm(false);
     if (r.error) return toast.danger(r.error);
     setResult(r);
@@ -608,7 +636,7 @@ export default function Swap() {
 
   const dry = status?.mode?.dry_run !== false;
   const header = <PageHeader group="Aksi" title="Swap"
-    desc="Menukar aset lewat agregator Kyber — rute yang sama dipakai bot untuk zap dan menjual memecoin sisa." />;
+    desc="Menukar aset lewat agregator: halaman ini memindai semua agregator yang aktif, memilih rute terbaik, atau kamu pilih sendiri. Kunci dan urutannya diatur di Pengaturan → Agregator swap." />;
 
   if (tokens === null) return (<>{header}<Loading page /></>);
 
@@ -722,6 +750,37 @@ export default function Swap() {
               <div className="num mt-3 h-4 text-xs text-muted">{quote?.usdOut != null && !take ? `≈ ${usd(quote.usdOut)}` : ''}</div>
             </div>
           </Card>
+
+          {ready && routes && (
+            <Card className="gap-0! px-4! py-3!">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">{t('Rute agregator')}</span>
+                <span className="text-xs text-muted">{t('{n} dari {m} menemukan rute', { n: routes.filter((r) => r.state === 'ok').length, m: routes.length })}</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <RouteRow active={agg === 'auto'} onPress={() => setAgg('auto')} title={t('Otomatis · terbaik')}
+                  sub={rawQuote.chosenLabel && !rawQuote.error ? t('sekarang: {a}', { a: routes.find((r) => r.best)?.label || '—' }) : ''} />
+                {routes.map((r) => {
+                  const top = routes.find((x) => x.best);
+                  const diff = r.state === 'ok' && top?.amountOut > 0 ? (r.amountOut / top.amountOut - 1) * 100 : null;
+                  return (
+                    <RouteRow key={r.id} active={agg === r.id} disabled={r.state === 'off'} onPress={() => setAgg(r.id)}
+                      title={r.label} best={r.best}
+                      sub={r.state === 'off' ? t(r.blocker) : r.state === 'noroute' ? t('tidak ada rute') : [r.dex && r.dex.replace(/^[^:]+: ?/, ''), r.ms != null ? `${r.ms} ms` : null].filter(Boolean).join(' · ')}
+                      right={r.state === 'ok' ? (
+                        <div className="text-right">
+                          <div className="num text-sm font-medium">{num(r.amountOut, 6)} {rawQuote.symbolOut}</div>
+                          <div className={`num text-xs ${r.tooLossy ? 'text-danger' : 'text-muted'}`}>
+                            {diff != null && diff < -0.005 ? `${num(diff, 2)}%` : t('terbaik')}{r.lossBps != null ? ` · ${t('rugi')} ${num(r.lossBps / 100, 2)}%` : ''}
+                          </div>
+                        </div>
+                      ) : null} />
+                  );
+                })}
+              </div>
+              {agg !== 'auto' && <p className="mt-2 text-xs text-muted">{t('Swap hanya lewat {a}; kalau gagal tidak pindah ke agregator lain.', { a: picked?.label || agg })}</p>}
+            </Card>
+          )}
 
           {ready && quote?.error && <Notice status="danger" title={t('Tidak bisa dikutip')}>{quote.error}</Notice>}
 
