@@ -1964,6 +1964,22 @@ const buttons = (o) => (o?.params?.reply_markup?.inline_keyboard || []).flat().m
     assert.strictEqual(buruk.tooLossy, true, `loss ${buruk.lossBps} bps should be flagged`);
   });
 
+  await t('an amount above the balance is still quoted (flagged insufficient) but the swap itself is refused', async () => {
+    const w = build({ dryRun: false });
+    const q = await w.api('POST', '/api/manual/swap/quote', { tokenIn: ADDR.usdg, tokenOut: MEME, amount: '9999' });
+    assert.ok(!q.error, q.error);
+    assert.ok(q.amountOut > 0, 'a quote is returned');
+    assert.strictEqual(q.amountRaw, '9999000000');
+    assert.deepStrictEqual(q.insufficient, { balance: 150, symbol: 'USDG' });
+    const ok = await w.api('POST', '/api/manual/swap/quote', { tokenIn: ADDR.usdg, tokenOut: MEME, amount: '10' });
+    assert.strictEqual(ok.insufficient, null);
+    let sent = false;
+    w.engine.kyber.swap = async () => { sent = true; return { hash: '0x' }; };
+    const r = await w.api('POST', '/api/manual/swap', { tokenIn: ADDR.usdg, tokenOut: MEME, amount: '9999' });
+    assert.match(r.error || '', /saldo cuma/);
+    assert.strictEqual(sent, false);
+  });
+
   await t('a swap is refused in simulation mode, run in LIVE', async () => {
     const w = build();
     const r = await w.api('POST', '/api/manual/swap', { tokenIn: ADDR.usdg, tokenOut: MEME, amount: '10' });

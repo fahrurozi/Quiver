@@ -2102,9 +2102,13 @@ function createServer({ engine, store, cfg, cfgPath, chain, rpc, log, telegram, 
     'POST /api/manual/swap/quote': async (req) => {
       const b = await readBody(req);
       try {
-        const raw = await manual.amountRaw(b.tokenIn, b.amount);
+        // Above the balance: still quoted, flagged `insufficient` (the page disables the
+        // button). POST /api/manual/swap keeps rejecting it via amountRaw.
+        const { raw, maxVal, dec, symbol } = await manual.amountInfo(b.tokenIn, b.amount);
         if (raw <= 0n) return { error: 'jumlah nol — saldonya kosong?' };
-        return { ...(await manual.quoteSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw.toString(), aggregator: b.aggregator || 'auto' })), amountRaw: raw.toString() };
+        const q = await manual.quoteSwap({ tokenIn: b.tokenIn, tokenOut: b.tokenOut, amountRaw: raw.toString(), aggregator: b.aggregator || 'auto' });
+        const insufficient = raw > maxVal ? { balance: Number(maxVal) / 10 ** dec, symbol } : null;
+        return { ...q, amountRaw: raw.toString(), insufficient };
       } catch (e) { return { error: e.message }; }
     },
     'POST /api/manual/swap': async (req) => {

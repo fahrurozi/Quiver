@@ -821,8 +821,8 @@ export default function Swap() {
           {dry ? (
             <Button size="lg" variant="outline" className="w-full" onPress={() => { location.hash = 'settings'; }}>{t('Nyalakan LIVE dulu')}</Button>
           ) : !confirm ? (
-            <Button size="lg" className="w-full" isDisabled={!quote || !!quote.error || quote.tooLossy} onPress={() => setConfirm(true)}>
-              {t('Tukar')}
+            <Button size="lg" className="w-full" isDisabled={!quote || !!quote.error || quote.tooLossy || !!quote.insufficient} onPress={() => setConfirm(true)}>
+              {quote?.insufficient && !quote.error ? t('Saldo {s} tidak cukup', { s: quote.insufficient.symbol || '' }) : t('Tukar')}
             </Button>
           ) : (
             <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">

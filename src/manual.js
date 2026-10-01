@@ -1016,24 +1016,32 @@ class Manual {
   // Turn "all" / "50%" / a number into a raw amount, leaving gas
   // aside if what is sold is native ETH.
   async amountRaw(token, input) {
+    const { raw, maxVal, dec, symbol } = await this.amountInfo(token, input);
+    if (raw > maxVal) throw new Error(`saldo cuma ${(Number(maxVal) / 10 ** dec).toPrecision(6)} ${symbol}`.trim());
+    return raw;
+  }
+
+  // The same parse WITHOUT the balance check: the swap page still shows a quote for an
+  // amount above the balance (button disabled), so the user sees the rate before topping up.
+  async amountInfo(token, input) {
     const h = (await this.held()).find((x) => x.address === lc(token));
     const dec = h?.decimals ?? 18;
     const bal = BigInt(h?.raw || '0');
     const reserve = this.gasReserve();
     const maxVal = isNative(token) ? (bal > reserve ? bal - reserve : 0n) : bal;
+    const symbol = h?.symbol || '';
+    const out = (raw) => ({ raw, maxVal, dec, symbol });
     const t = String(input).trim().toLowerCase();
-    if (t === 'semua' || t === 'all' || t === 'max') return maxVal;
+    if (t === 'semua' || t === 'all' || t === 'max') return out(maxVal);
     const percent = t.match(/^([\d.,]+)\s*%$/);
     if (percent) {
       const f = Number(percent[1].replace(',', '.'));
       if (!Number.isFinite(f) || f <= 0 || f > 100) throw new Error('persen harus antara 0 dan 100');
-      return (maxVal * BigInt(Math.round(f * 100))) / 10000n;
+      return out((maxVal * BigInt(Math.round(f * 100))) / 10000n);
     }
     const n = Number(t.replace(/[^\d.,-]/g, '').replace(',', '.'));
     if (!Number.isFinite(n) || n <= 0) throw new Error('jumlah harus angka, "semua", atau persen (mis. 50%)');
-    const raw = ethers.parseUnits(n.toFixed(Math.min(dec, 18)), dec);
-    if (raw > maxVal) throw new Error(`saldo cuma ${(Number(maxVal) / 10 ** dec).toPrecision(6)} ${h?.symbol || ''}`.trim());
-    return raw;
+    return out(ethers.parseUnits(n.toFixed(Math.min(dec, 18)), dec));
   }
 
   // `aggregator`: 'auto' (default) = the best route among those that stay inside the loss limit,

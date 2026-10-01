@@ -586,6 +586,7 @@ const EN = {
   'Jumlah yang ditukar': 'Amount to swap',
   'Balik arah': 'Flip direction',
   'Tidak bisa dikutip': 'No quote available',
+  'Saldo {s} tidak cukup': 'Insufficient {s} balance',
   'Dikirim': 'Sent',
   'Diterima': 'Received',
   'Nilai': 'Value',
