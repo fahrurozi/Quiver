@@ -12,6 +12,7 @@ import PnlCalendar from './PnlCalendar';
 import WalletPositionHistory from './WalletPositionHistory';
 import { usd, kUsd, pct, tone, ago, dur, num, age, widthPct } from '../fmt';
 import { useI18n, translate as tt } from '../i18n';
+import { usePairs, tokenColumn } from './TokenCell';
 
 export const WINDOWS = [['250000', '~7 jam'], ['900000', '~1 hari'], ['2600000', '~3 hari'], ['6000000', '~7 hari'], ['100000000', 'Semua riwayat']];
 const isAddr = (a) => /^0x[0-9a-f]{40}$/.test(a);
@@ -129,7 +130,7 @@ function Details({ s, open }) {
 // Total fees = what was already withdrawn + what is still attached to the position.
 const feeTotal = (p) => (p.status === 'open' ? (p.fees_q || 0) + (p.live_fee_q || 0) : (p.fees_q || 0));
 
-const posCols = (open) => [
+const posCols = (open, pairOf) => [
   { key: 'pair', label: 'Posisi / pool', sort: (p) => `${p.symbol0}/${p.symbol1}`,
     search: (p) => `${p.symbol0}/${p.symbol1} ${p.token_id}`, render: (p) => (
     <div className="flex items-center gap-2.5">
@@ -169,6 +170,7 @@ const posCols = (open) => [
       )}
     </div>) },
   { key: 'dpr', label: 'DPR', align: 'end', sort: (p) => p.dprPct, render: (p) => <span className={tone(p.dprPct)}>{p.dprPct == null ? '—' : Math.abs(p.dprPct) >= 1000 ? pct(p.dprPct / 1000, 2).replace('%', 'k%') : pct(p.dprPct, 2)}</span> },
+  ...(open && pairOf ? [tokenColumn(pairOf)] : []),
   { key: 'rng', label: 'Rentang harga', sortable: false, render: (p) => (
     <PriceRange lo={p.tick_lower} hi={p.tick_upper} cur={open ? p.curTick : null}
       dec0={p.dec0} dec1={p.dec1} quoteSide={p.quoteSide} symbol0={p.symbol0} symbol1={p.symbol1}
@@ -243,6 +245,7 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
   const [blocks, setBlocks] = useState('900000');
   const touched = useRef(false);
   const [data, setData] = useState(null);
+  const pairOf = usePairs(data?.open);
   const [loading, setLoading] = useState(true);
   // Background refetch (slow poll, after a scan) — old data stays shown.
   const [busy, setBusy] = useState(false);
@@ -389,7 +392,7 @@ export default function WalletDetail({ address, autoScan = true, showTargetButto
                 position table. The events are stored since the scan, so it is free. */}
             <Panel title={t('Posisi berjalan ({n})', { n: data.open.length })} className="mb-4" bodyClass="p-0"
               action={<Totals rows={data.open} />}>
-              <DataTable label="Posisi berjalan" rows={data.open} rowKey={(p) => p.token_id} columns={posCols(true)}
+              <DataTable label="Posisi berjalan" rows={data.open} rowKey={(p) => p.token_id} columns={posCols(true, pairOf)}
                 searchable defaultSort={{ column: 'val', direction: 'descending' }} onRow={(p) => setHistId(p.token_id)}
                 empty={<Empty title="Tidak ada posisi berjalan" />}
                 footer={<TotalRow rows={data.open} open />} />

@@ -6,6 +6,7 @@ import { PageHeader, Stat, Hero, HeroFigure, Panel, Empty, Loading, Notice, KV, 
 import PnlCalendar from '../components/PnlCalendar';
 import GrowthChart from '../components/GrowthChart';
 import ShareButton, { ShareDialog, totalCard, dailyCard } from '../components/ShareCard';
+import { tokenColumn } from '../components/TokenCell';
 import { Pair, SyncState, FeeCell } from './Positions';
 import { GmgnProvider } from '../components/GmgnDot';
 import PositionHistory from '../components/PositionHistory';
@@ -516,6 +517,7 @@ export default function Overview() {
                 <PriceRange position={x} lo={x.tick_lower} hi={x.tick_upper} cur={x.curTick}
                   dec0={x.dec0} dec1={x.dec1} quoteSide={x.quoteSide} symbol0={x.symbol0} symbol1={x.symbol1}
                   entrySqrt={x.entrySqrt} exitSqrt={x.exitSqrt} showPrices={false} />) },
+              tokenColumn(pairOf),
               { key: 'vol', label: 'Volume 24 jam', align: 'end', sort: (x) => pairOf(x)?.volume?.h24 ?? -1, render: (x) => <VolCell pair={pairOf(x)} /> },
               { key: 'liq', label: 'Likuiditas pool', align: 'end', sort: (x) => pairOf(x)?.liquidityUsd ?? -1, render: (x) => <LiqCell pair={pairOf(x)} p={x} /> },
               { key: 'val', label: 'Nilai', align: 'end', sort: (x) => x.valueUsd, render: (x) => (

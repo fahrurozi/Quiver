@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { usePairs, tokenColumn } from '../components/TokenCell';
 import { Button, Spinner } from '@heroui/react';
 import { Coins, DoorOpen } from 'lucide-react';
 import { usePoll, useResync } from '../hooks';
@@ -154,6 +155,7 @@ export default function Positions({ param }) {
   // The endpoint is cheap (database + the in-memory sync result), so a position just
   // opened by the bot appears within ~5 seconds.
   const { data: d, error, reload } = usePoll(param ? null : '/api/positions', 5000);
+  const pairOf = usePairs(d?.positions);
   // The button forces a fresh chain read, not merely refetching the last
   // sync result — see useResync.
   const [resync, syncing] = useResync(reload);
@@ -228,6 +230,7 @@ export default function Positions({ param }) {
               <PriceRange position={p} lo={p.tick_lower} hi={p.tick_upper} cur={p.curTick}
                 dec0={p.dec0} dec1={p.dec1} quoteSide={p.quoteSide} symbol0={p.symbol0} symbol1={p.symbol1}
                 entrySqrt={p.entrySqrt} exitSqrt={p.exitSqrt} />) },
+            tokenColumn(pairOf),
             { key: 'val', label: 'Nilai', align: 'end', sort: (p) => p.valueUsd, render: (p) => (
               <div className="whitespace-nowrap">{usd(p.valueUsd)}<div className="text-xs text-muted">{t('modal {v}', { v: usd(p.costUsd) })}</div></div>) },
             { key: 'fee', label: 'Fee', align: 'end', sort: (p) => p.feeUsd, render: (p) => dash(p, <FeeCell p={p} />) },

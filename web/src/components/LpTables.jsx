@@ -6,6 +6,7 @@ import { Panel, Dot, Empty, DataTable, PriceRange, Refreshing, TradeLinks, Walle
 import { TokenPair, PairName } from './TokenIcon';
 import { Pair } from '../pages/Positions';
 import { GmgnProvider } from './GmgnDot';
+import { usePairs, tokenColumn } from './TokenCell';
 import { usd, pct, tone, ago, short, locale as fmtLocale, ACTIONS, DECISIONS } from '../fmt';
 import { useI18n, reason } from '../i18n';
 import { useClosePosition } from '../useClosePosition';
@@ -70,6 +71,7 @@ export function BotPositions({ open, closed, onFocus, focusId, onHist, reload, w
   const { t } = useI18n();
   const { close, closeAll, closing } = useClosePosition(reload);
   const rows = [...open.map((p) => ({ ...p, status: 'open' })), ...closed];
+  const pairOf = usePairs(rows);
   const pnl = sum(rows, (p) => p.pnlUsd);
   const canClose = !!reload;
   const sourceOf = (p) => (onSource && p.target && p.mirror_of
@@ -100,6 +102,7 @@ export function BotPositions({ open, closed, onFocus, focusId, onHist, reload, w
             <PriceRange position={p} lo={p.tick_lower} hi={p.tick_upper} cur={p.status === 'open' ? p.curTick : null}
               dec0={p.dec0} dec1={p.dec1} quoteSide={p.quoteSide} symbol0={p.symbol0} symbol1={p.symbol1}
               entrySqrt={p.entrySqrt} exitSqrt={p.exitSqrt} />) },
+          tokenColumn(pairOf),
           { key: 'cost', label: 'Modal', align: 'end', sort: (p) => p.costUsd, render: (p) => usd(p.costUsd) },
           { key: 'val', label: 'Nilai / hasil', align: 'end', sort: (p) => (p.status === 'open' ? p.valueUsd + (p.feeUsd || 0) : p.outUsd), render: (p) => (
             p.status === 'open'
@@ -133,6 +136,7 @@ export function BotPositions({ open, closed, onFocus, focusId, onHist, reload, w
 // bot positions table); its key is the same as rowKey below.
 export function WalletPositions({ rows, onHist, jumpTo, loading = false, className = '' }) {
   const { t } = useI18n();
+  const pairOf = usePairs(rows);
   if (!rows.length) return null;
   return (
     <Panel title={t('Posisi wallet yang diriset ({n})', { n: rows.length })}
@@ -179,6 +183,7 @@ export function WalletPositions({ rows, onHist, jumpTo, loading = false, classNa
                 </div>
               </div>);
           } },
+          tokenColumn(pairOf),
           { key: 'rng', label: 'Rentang harga', sortable: false, render: (p) => (
             <PriceRange lo={p.tick_lower} hi={p.tick_upper} cur={p.curTick ?? null} dec0={p.dec0} dec1={p.dec1} quoteSide={p.quoteSide} symbol0={p.symbol0} symbol1={p.symbol1} />) },
           { key: 'when', label: 'Waktu', align: 'end', sort: (p) => p.closed_ts || p.opened_ts, render: (p) => <When p={p} /> },
