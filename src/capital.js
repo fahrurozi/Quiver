@@ -276,7 +276,13 @@ class Capital {
       if (flo === fEnd) break;
       let hi = end;
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if ((await f(mid)) === flo) lo = mid; else hi = mid; }
-      added += await this.ethEvent(me, hi, (await f(hi)) - flo, ours);
+      const residual = (await f(hi)) - flo;
+      // Re-read the two balances instead of trusting the bisect's cache: one inconsistent answer
+      // from an archive node made a $314 "deposit" at a block where the balance did not move.
+      // A real outside transfer shows as a jump at that block beyond the bot tx effect.
+      const jump = (await this.balanceAt(me, hi)) - (await this.balanceAt(me, hi - 1)) - (deltaAt.get(hi) || 0n);
+      if (jump === residual) added += await this.ethEvent(me, hi, residual, ours);
+      else this.log(`selisih saldo ETH di blok ${hi} tidak terbukti (lompatan ${jump} wei vs sisa ${residual} wei), dilewati`);
       lo = hi;
     }
     // There is still a remainder after ETH_EVENTS points: stop at the last point already

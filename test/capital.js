@@ -35,7 +35,7 @@ const TRANSFER = ethers.id('Transfer(address,address,uint256)');
 // `logs`: token transfers; `eth`: ETH balance per block (a block without an entry = the previous
 // block's balance); `ourBlocks`: blocks where the bot's txs landed; `blockTxs`: block contents (wallet
 // txs that are not bot txs) — without it, the leftover difference is treated as an internal transfer.
-function world({ logs = [], senders = {}, code = {}, eth = {}, ourBlocks = {}, blockTxs = {} } = {}) {
+function world({ logs = [], senders = {}, code = {}, eth = {}, ourBlocks = {}, blockTxs = {}, batchEth = null } = {}) {
   const store = new Store(':memory:');
   store.run("INSERT INTO txs(hash,ts,kind,status) VALUES('0xown',1,'burn','sukses')");
   for (const [h, b] of Object.entries(ourBlocks)) store.run("INSERT INTO txs(hash,ts,kind,status) VALUES(?,?,'mint','sukses')", h, b * 1000 * 1000);
@@ -49,11 +49,14 @@ function world({ logs = [], senders = {}, code = {}, eth = {}, ourBlocks = {}, b
     if (method === 'eth_getBalance') return hex(balAt(parseInt(params[1], 16)));
     throw new Error('rpc ' + method);
   };
+  // `batchEth`: balance override that only the batched reads see (an archive node answering inconsistently).
   const rpc = {
     blockNumber: async () => 2005,
     hasArchive: () => true,
     call: one,
-    batch: async (calls) => Promise.all(calls.map(async (c) => { try { return { result: await one(c.method, c.params) }; } catch (e) { return { error: { message: e.message } }; } })),
+    batch: async (calls) => Promise.all(calls.map(async (c) => { try {
+      if (batchEth && c.method === 'eth_getBalance') return { result: hex(batchEth(parseInt(c.params[1], 16), balAt(parseInt(c.params[1], 16)))) };
+      return { result: await one(c.method, c.params) }; } catch (e) { return { error: { message: e.message } }; } })),
     callAt: async (to) => word(to === ADDR.usdg ? 12_000_000 : 0),
     getLogs: async (f) => logs.filter((l) => f.address.includes(l.address) && (f.topics[1] == null || l.topics[1] === f.topics[1]) && (f.topics[2] == null || l.topics[2] === f.topics[2])
       && parseInt(l.blockNumber, 16) >= parseInt(f.fromBlock, 16) && parseInt(l.blockNumber, 16) <= parseInt(f.toBlock, 16)),
@@ -100,6 +103,17 @@ const tr = ({ dir, asset = ADDR.usdg, value, block = 1500, hash, cp = EOA }) => 
     const s = d.cap.summary();
     near(s.depositsUsd, 300, 'total setoran');
     near(s.capitalUsd, s.baselineUsd + 300, 'modal');
+  });
+
+  await t('ETH balance jump that a fresh read does not confirm is not recorded as a deposit', async () => {
+    const d = world({
+      eth: {},
+      ourBlocks: { '0xgas': 1300 },
+      batchEth: (n, v) => (n >= 1500 ? v + 12n * 10n ** 16n : v),   // only the batched reads show +0.12 ETH from block 1500
+    });
+    const r = await d.cap.sync(W);
+    assert.strictEqual(r.added, 0);
+    assert.strictEqual(d.cap.rows().length, 0);
   });
 
   await t('USDG deposit from an EOA is recorded with its block & time', async () => {
