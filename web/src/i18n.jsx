@@ -1413,6 +1413,17 @@ const EN = {
   'Persen dari target': 'Percent of the target',
   'Kelipatan dari target': 'Multiple of the target',
   'Nominal tetap': 'Fixed amount',
+  'Porsi equity target': 'Target\u2019s equity share',
+  'mirror = likuiditas identik; pct/multiplier = skala; nominal tetap = modal sama tiap posisi; porsi equity = % equity yang sama dengan target':
+    'mirror = identical liquidity; pct/multiplier = scaled; fixed = same capital every position; equity share = the same % of equity as the target',
+  'Pengali porsi equity': 'Equity share multiplier',
+  'Target masuk 20% equity-nya, pengali 0,5 → kita masuk 10% equity kita':
+    'The target puts in 20% of its equity, multiplier 0.5 → we put in 10% of ours',
+  'Batas porsi equity (%)': 'Equity share cap (%)',
+  'Porsi target dibatasi angka ini — equity target sering terbaca lebih kecil (memecoin & wallet lain tidak terhitung)':
+    'The target\u2019s share is capped here — its equity is often under-read (memecoins and other wallets are not counted)',
+  'Di mode porsi equity: dipakai kalau equity target/kita tidak terbaca':
+    'In equity share mode: used when the target\u2019s or our equity cannot be read',
   'mirror = likuiditas identik; pct/multiplier = skala; nominal tetap = modal sama tiap posisi':
     'mirror = identical liquidity; pct/multiplier = scaled; fixed = same capital every position',
   'Persen dari target (%)': 'Percent of the target (%)',

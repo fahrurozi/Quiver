@@ -4,10 +4,15 @@ export const SCHEMA = [
   { group: 'Ukuran posisi', icon: 'ti-ruler', fields: [
     { path: 'sizing.mode', label: 'Cara menentukan ukuran', type: 'select', options: [
       ['mirror', 'Sama persis dengan target'], ['pct', 'Persen dari target'],
-      ['multiplier', 'Kelipatan dari target'], ['fixed_quote', 'Nominal tetap']],
-      help: 'mirror = likuiditas identik; pct/multiplier = skala; nominal tetap = modal sama tiap posisi' },
-    { path: 'sizing.pct', label: 'Persen dari target (%)', type: 'number', step: 1, when: (r) => r.sizing.mode === 'pct' },
+      ['multiplier', 'Kelipatan dari target'], ['fixed_quote', 'Nominal tetap'], ['equity', 'Porsi equity target']],
+      help: 'mirror = likuiditas identik; pct/multiplier = skala; nominal tetap = modal sama tiap posisi; porsi equity = % equity yang sama dengan target' },
+    { path: 'sizing.pct', label: 'Persen dari target (%)', type: 'number', step: 1, when: (r) => r.sizing.mode === 'pct' || r.sizing.mode === 'equity',
+      help: 'Di mode porsi equity: dipakai kalau equity target/kita tidak terbaca' },
     { path: 'sizing.multiplier', label: 'Kelipatan', type: 'number', step: 0.1, when: (r) => r.sizing.mode === 'multiplier' },
+    { path: 'sizing.equity_mult', label: 'Pengali porsi equity', type: 'number', step: 0.1, when: (r) => r.sizing.mode === 'equity',
+      help: 'Target masuk 20% equity-nya, pengali 0,5 → kita masuk 10% equity kita' },
+    { path: 'sizing.equity_max_pct', label: 'Batas porsi equity (%)', type: 'number', step: 5, when: (r) => r.sizing.mode === 'equity',
+      help: 'Porsi target dibatasi angka ini — equity target sering terbaca lebih kecil (memecoin & wallet lain tidak terhitung)' },
     { path: 'sizing.fixed_quote_usd', label: 'Nominal tetap (USD)', type: 'number', step: 5, when: (r) => r.sizing.mode === 'fixed_quote',
       help: 'dipakai di pool berkuotasi USDG' },
     { path: 'sizing.fixed_quote_eth', label: 'Nominal tetap (ETH)', type: 'number', step: 0.005, when: (r) => r.sizing.mode === 'fixed_quote',

@@ -383,8 +383,11 @@ const RULE_GROUPS = [
     g: 'sizing', title: '💰 Ukuran posisi', fields: [
       F.pick('mode', 'Cara menentukan ukuran', [
         ['mirror', 'Sama persis dengan target'], ['pct', 'Persen dari target'],
-        ['multiplier', 'Kelipatan target'], ['fixed_quote', 'Nominal tetap']]),
-      F.pct('pct', 'Persen dari target', { hi: 1000, when: (r) => r.sizing.mode === 'pct' }),
+        ['multiplier', 'Kelipatan target'], ['fixed_quote', 'Nominal tetap'], ['equity', 'Porsi equity target']]),
+      F.pct('pct', 'Persen dari target', { hi: 1000, when: (r) => r.sizing.mode === 'pct' || r.sizing.mode === 'equity' }),
+      F.num('equity_mult', 'Pengali porsi equity', { hi: 100, when: (r) => r.sizing.mode === 'equity',
+        help: 'Target masuk 20% equity-nya, pengali 0,5 → kita 10% equity kita. Equity tidak terbaca → pakai persen dari target.' }),
+      F.pct('equity_max_pct', 'Batas porsi equity', { hi: 100, when: (r) => r.sizing.mode === 'equity' }),
       F.num('multiplier', 'Kelipatan target', { hi: 100, when: (r) => r.sizing.mode === 'multiplier' }),
       F.usd('fixed_quote_usd', 'Nominal tetap (pool USDG)', { when: (r) => r.sizing.mode === 'fixed_quote' }),
       F.num('fixed_quote_eth', 'Nominal tetap (pool ETH)', { hi: 1000, unit: 'ETH', when: (r) => r.sizing.mode === 'fixed_quote' }),

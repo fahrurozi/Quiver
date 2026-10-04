@@ -11,6 +11,7 @@ const { SwapRouter, aggLabel } = require('./swaprouter');
 const { pickSwapPool } = require('./swappool');
 const { Compound } = require('./compound');
 const { Capital } = require('./capital');
+const { Holdings } = require('./holdings');
 const { rulesFor, planEntry, planExit, quoteToUsd, usdPerQuote } = require('./policy');
 const { enumerateV4, livePositions } = require('./scout');
 const { Market } = require('./market');
@@ -691,10 +692,11 @@ class Engine {
       return lv?.valueUsd ?? Math.max(0, (mp.cost_quote || 0) - (mp.out_quote || 0)) * usdPerQuote(mp.quote_symbol, this.ethUsd, this.chain);
     };
     let mirror = mirrors[0] || null;
+    const equity = rules.sizing.mode === 'equity' ? await this.sizingEquity(act, sum, cash) : {};
     const ctx = {
       chain: this.chain, rules, slot0: act.slot0, dec0: toks[0].decimals, dec1: toks[1].decimals,
       ethUsd: this.ethUsd, openExposureUsd: sum.exposureUsd, spentTodayUsd: spent, openCount: sum.openCount,
-      cash, existingUsd: mirror ? usdOfMirror(mirror) : null,
+      cash, existingUsd: mirror ? usdOfMirror(mirror) : null, ...equity,
     };
     let d = planEntry(act, ctx);
     // The range from the rules (recenter/scale/…) is not the same as the first mirror: look for another mirror
@@ -3195,6 +3197,38 @@ class Engine {
   // ETH). Split per asset because cash in ANOTHER quote asset has to be bridged first —
   // policy cuts it deeper. Deliberately read fresh (not this.cash, which can
   // be two minutes old) because its result decides the transaction size.
+  // Inputs for sizing mode "equity" (planEntry). Unknown = null, which makes planEntry fall
+  // back to pct — a failed read never loses the copy. Our equity is the snapshotEquity sum;
+  // `cash` (live) is the spendable read just made, otherwise the last refreshCash.
+  async sizingEquity(act, sum, cash) {
+    const ourCash = cash ? cash.usdg + cash.eth * this.ethUsd : this.cash?.usd;
+    const ourEquityUsd = ourCash == null ? null : ourCash + sum.exposureUsd + (sum.leftoverUsd || 0) + sum.feeUsd;
+    const targetEquityUsd = await this.targetEquity(act).catch((e) => {
+      this.log(`equity target ${act.target}: ${e.message}`);
+      return null;
+    });
+    return { ourEquityUsd, targetEquityUsd };
+  }
+
+  // Target equity = its quote cash read now + its open LP from the last wallet research scan
+  // (wpositions, already USD) + this position when that scan has not seen it yet (its cash
+  // already dropped by that amount). Never researched → its LP is unknown → null.
+  // ponytail: non-quote tokens (memecoins) are not counted; sizing.equity_max_pct bounds that under-read.
+  async targetEquity(act) {
+    const w = String(act.target || '').toLowerCase();
+    if (!w || !this.store.get('SELECT 1 FROM wallets WHERE chain=? AND lower(address)=?', this.network, w)) return null;
+    const { ADDR, usdgDecimals } = this.chain;
+    this.holdings ??= new Holdings({ rpc: this.rpc, store: this.store, chain: this.chain, log: this.log });
+    const b = await this.holdings.balances(w, [ADDR.native, ADDR.weth, ADDR.usdg]);
+    const ethLike = (b.get(ADDR.native) || 0n) + (b.get(ADDR.weth) || 0n);
+    const cashUsd = (Number(ethLike) / 1e18) * this.ethUsd + Number(b.get(ADDR.usdg) || 0n) / 10 ** usdgDecimals;
+    const lp = this.store.get(`SELECT COALESCE(SUM(live_value_q + live_fee_q), 0) v, COALESCE(SUM(venue=? AND token_id=?), 0) seen
+      FROM wpositions WHERE chain=? AND lower(wallet)=? AND status='open'`, act.venue, String(act.tokenId ?? ''), this.network, w);
+    const q = this.chain.quoteSideOf(act.token0, act.token1);
+    const actUsd = q ? quoteToUsd(act.valueQuote || 0, q.kind, this.ethUsd) : 0;
+    return cashUsd + (lp?.v || 0) + (lp?.seen ? 0 : actUsd);
+  }
+
   async spendableCash() {
     const reserve = await this.gasReserve();
     const { usdgDecimals } = this.chain;

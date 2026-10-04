@@ -15,8 +15,12 @@ const BRIDGE_MARGIN_BPS = 100;
 
 const DEFAULTS = {
   sizing: {
-    mode: 'pct',              // mirror | pct | multiplier | fixed_quote
+    mode: 'pct',              // mirror | pct | multiplier | fixed_quote | equity
     pct: 25,
+    // equity: the same share of OUR equity as the target put in of ITS equity.
+    // Falls back to `pct` when either equity is unknown.
+    equity_mult: 1,
+    equity_max_pct: 30,       // ceiling on the target's share (its equity is usually under-read)
     multiplier: 1,
     fixed_quote_usd: 50,
     fixed_quote_eth: 0.02,
@@ -94,8 +98,9 @@ const DEFAULTS = {
 //   [type, min, max]  type: num | int | bool | enum(list) | list
 const RULE_SPEC = {
   sizing: {
-    mode: ['enum', ['mirror', 'pct', 'multiplier', 'fixed_quote']],
+    mode: ['enum', ['mirror', 'pct', 'multiplier', 'fixed_quote', 'equity']],
     pct: ['num', 0, 100_000], multiplier: ['num', 0, 1000],
+    equity_mult: ['num', 0, 100], equity_max_pct: ['num', 0, 100],
     fixed_quote_usd: ['num', 0, 1e9], fixed_quote_eth: ['num', 0, 1e6],
     min_quote_usd: ['num', 0, 1e9], force_min: ['bool'], force_min_usd: ['num', 0, 1e9],
     max_quote_per_position_usd: ['num', 0, 1e9],
@@ -260,6 +265,8 @@ function valueOfLiquidity(chain, act, L, tickLower, tickUpper, slot0, dec0, dec1
   return { amount0, amount1, value: v ? v.value : null, symbol: v ? v.symbol : null, kind: v ? v.kind : null };
 }
 
+const usdShort = (x) => (x >= 1000 ? `$${(x / 1000).toFixed(1)}k` : `$${x.toFixed(0)}`);
+
 // Convert a USD threshold to the pool's quote unit (ETH uses the rate from the config).
 function usdToQuote(usd, quoteKind, ethUsd) {
   if (quoteKind === 'usd') return usd;
@@ -326,11 +333,29 @@ function planEntry(act, ctx) {
   const Ltarget = BigInt(act.liquidity) < 0n ? -BigInt(act.liquidity) : BigInt(act.liquidity);
   let L;
   const s = rules.sizing;
-  if (s.mode === 'mirror') L = Ltarget;
-  else if (s.mode === 'pct') L = (Ltarget * BigInt(Math.round(s.pct * 1e6))) / 100000000n;
-  else if (s.mode === 'multiplier') L = (Ltarget * BigInt(Math.round(s.multiplier * 1e6))) / 1000000n;
-  else if (s.mode === 'fixed_quote') {
-    const wantQuote = q.kind === 'eth' ? s.fixed_quote_eth : s.fixed_quote_usd;
+  let mode = s.mode;
+  // equity: target share of its equity × our equity → a fixed amount in the quote asset.
+  // Either equity unknown (null/0) → plain pct, and the reason says so.
+  let wantQuote = null, eqNote = null;
+  if (mode === 'equity') {
+    const tEq = ctx.targetEquityUsd, ours = ctx.ourEquityUsd;
+    if (tEq > 0 && ours > 0 && targetUsd > 0) {
+      const raw = targetUsd / tEq;
+      const share = Math.min(raw, s.equity_max_pct / 100) * s.equity_mult;
+      wantQuote = usdToQuote(share * ours, q.kind, ethUsd);
+      const pc = (x) => `${(x * 100).toFixed(1)}%`;
+      eqNote = `equity: target ${pc(raw)} dari ${usdShort(tEq)}${raw > s.equity_max_pct / 100 ? ` (dibatasi ${s.equity_max_pct}%)` : ''}`
+        + ` → kita ${pc(share)} dari ${usdShort(ours)}`;
+    } else {
+      mode = 'pct';
+      eqNote = `equity ${tEq > 0 ? 'kita' : 'target'} tidak terbaca → pct ${s.pct}%`;
+    }
+  }
+  if (mode === 'fixed_quote') wantQuote = q.kind === 'eth' ? s.fixed_quote_eth : s.fixed_quote_usd;
+  if (mode === 'mirror') L = Ltarget;
+  else if (mode === 'pct') L = (Ltarget * BigInt(Math.round(s.pct * 1e6))) / 100000000n;
+  else if (mode === 'multiplier') L = (Ltarget * BigInt(Math.round(s.multiplier * 1e6))) / 1000000n;
+  else if (wantQuote != null) {
     const ref = valueOfLiquidity(chain, act, Ltarget, range.tickLower, range.tickUpper, slot0, dec0, dec1);
     if (!ref.value || ref.value <= 0) return skip('nilai referensi nol, tidak bisa menskala ke nominal tetap');
     L = (Ltarget * BigInt(Math.round(wantQuote * 1e9))) / BigInt(Math.round(ref.value * 1e9));
@@ -405,7 +430,9 @@ function planEntry(act, ctx) {
 
   return {
     verdict: 'copy',
-    reason: capNote || `${s.mode} → $${usd.toFixed(2)}`,
+    reason: eqNote
+      ? `${eqNote} → $${usd.toFixed(2)}${capNote ? ` — ${capNote}` : ''}`
+      : capNote || `${mode} → $${usd.toFixed(2)}`,
     plan: {
       venue: act.venue,
       action: 'mint',
